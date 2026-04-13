@@ -23,6 +23,17 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 
+import com.itextpdf.text.Document;
+import com.itextpdf.text.DocumentException;
+import com.itextpdf.text.Font;
+import com.itextpdf.text.Paragraph;
+import com.itextpdf.text.pdf.BaseFont;
+import com.itextpdf.text.pdf.PdfWriter;
+
+
+import com.itextpdf.text.DocumentException;
+import java.io.IOException;
+
 /**
  * 【核心类】BackupUtils：便签备份工具类
  * 功能：将 APP 内所有笔记、文件夹、通话记录笔记导出为 .txt 文件到 SD 卡
@@ -58,7 +69,7 @@ public class BackupUtils {
     public static final int STATE_SUCCESS = 4;
 
     // 文本导出工具对象（内部类，专门负责导出逻辑）
-    private TextExport mTextExport;
+    private static TextExport mTextExport;
 
     /**
      * 私有构造方法（单例模式，外部不能直接 new）
@@ -82,6 +93,14 @@ public class BackupUtils {
         return mTextExport.exportToText();
     }
 
+    /**
+     * 对外暴露的导出PDF方法
+     * @return 导出状态码（成功/失败）
+     */
+    public int exportToPdf() {
+        return mTextExport.exportToPdf();
+    }
+
     // 获取导出的文件名
     public String getExportedTextFileName() {
         return mTextExport.mFileName;
@@ -94,7 +113,7 @@ public class BackupUtils {
 
     // ====================== 内部核心类：文本导出实现 ======================
     /**
-     * TextExport：真正执行“把数据库数据写到txt文件”的类
+     * TextExport：真正执行"把数据库数据写到txt文件"的类
      * 从数据库查询所有笔记 → 格式化 → 写入文件
      */
     private static class TextExport {
@@ -308,6 +327,239 @@ public class BackupUtils {
             ps.close();
             return STATE_SUCCESS;
         }
+
+
+        /**
+         * 导出 PDF 核心方法
+         * 1.检查SD卡 → 2.创建PDF文档 → 3.导出所有笔记 → 4.返回状态
+         */
+        public int exportToPdf() {
+            if (!externalStorageAvailable()) {
+                Log.d(TAG, "Media was not mounted");
+                return STATE_SD_CARD_UNMOUONTED;
+            }
+
+            File file = generateFileMountedOnSDcard(mContext, R.string.file_path, R.string.file_name_pdf_format);
+            if (file == null) {
+                Log.e(TAG, "create file to exported failed");
+                return STATE_SYSTEM_ERROR;
+            }
+            mFileName = file.getName();
+            mFileDirectory = mContext.getString(R.string.file_path);
+
+            FileOutputStream fos = null;
+            Document document = null;
+
+            try {
+                // 创建文件输出流
+                fos = new FileOutputStream(file);
+
+                // 创建PDF文档
+                document = new Document();
+
+                // 绑定PdfWriter到文档和输出流
+                PdfWriter.getInstance(document, fos);
+
+                // 打开文档开始写入
+                document.open();
+
+                // 创建字体 - 支持中文显示
+                BaseFont baseFont = BaseFont.createFont("STSong-Light", "UniGB-UCS2-H", BaseFont.NOT_EMBEDDED);
+                Font font = new Font(baseFont, 12, Font.NORMAL);
+
+                // 添加标题
+                String title = "笔记备份 - " + DateFormat.format("yyyy年MM月dd日 HH:mm", System.currentTimeMillis());
+                Paragraph titleParagraph = new Paragraph(title, font);
+                titleParagraph.setAlignment(Paragraph.ALIGN_CENTER);
+                document.add(titleParagraph);
+                document.add(new Paragraph(" "));
+                document.add(new Paragraph(" "));
+
+                // 导出文件夹笔记
+                Cursor folderCursor = mContext.getContentResolver().query(
+                        Notes.CONTENT_NOTE_URI,
+                        NOTE_PROJECTION,
+                        "(" + NoteColumns.TYPE + "=" + Notes.TYPE_FOLDER + " AND "
+                                + NoteColumns.PARENT_ID + "<>" + Notes.ID_TRASH_FOLER + ") OR "
+                                + NoteColumns.ID + "=" + Notes.ID_CALL_RECORD_FOLDER,
+                        null, null
+                );
+
+                if (folderCursor != null) {
+                    while (folderCursor.moveToNext()) {
+                        // 获取文件夹名称
+                        String folderName;
+                        if (folderCursor.getLong(NOTE_COLUMN_ID) == Notes.ID_CALL_RECORD_FOLDER) {
+                            folderName = mContext.getString(R.string.call_record_folder_name);
+                        } else {
+                            folderName = folderCursor.getString(NOTE_COLUMN_SNIPPET);
+                        }
+
+                        // 添加文件夹标题
+                        if (!TextUtils.isEmpty(folderName)) {
+                            Paragraph folderTitle = new Paragraph("【文件夹】" + folderName, font);
+                            folderTitle.setAlignment(Paragraph.ALIGN_LEFT);
+                            document.add(folderTitle);
+                            document.add(new Paragraph(" "));
+                        }
+
+                        // 导出文件夹下的所有笔记
+                        String folderId = folderCursor.getString(NOTE_COLUMN_ID);
+                        exportNoteToPdf(folderId, document, font, true);
+                    }
+                    folderCursor.close();
+                }
+
+                // 导出根目录笔记（不属于任何文件夹的笔记）
+                Cursor noteCursor = mContext.getContentResolver().query(
+                        Notes.CONTENT_NOTE_URI,
+                        NOTE_PROJECTION,
+                        NoteColumns.TYPE + "=" + Notes.TYPE_NOTE + " AND " + NoteColumns.PARENT_ID + "=0",
+                        null, null
+                );
+
+                if (noteCursor != null) {
+                    if (noteCursor.getCount() > 0) {
+                        // 添加根目录笔记标题
+                        Paragraph rootTitle = new Paragraph("【根目录笔记】", font);
+                        rootTitle.setAlignment(Paragraph.ALIGN_LEFT);
+                        document.add(rootTitle);
+                        document.add(new Paragraph(" "));
+
+                        while (noteCursor.moveToNext()) {
+                            String dateStr = DateFormat.format(
+                                    mContext.getString(R.string.format_datetime_mdhm),
+                                    noteCursor.getLong(NOTE_COLUMN_MODIFIED_DATE)).toString();
+
+                            Paragraph dateParagraph = new Paragraph("创建时间：" + dateStr, font);
+                            document.add(dateParagraph);
+
+                            String noteId = noteCursor.getString(NOTE_COLUMN_ID);
+                            exportNoteToPdf(noteId, document, font, false);
+
+                            // 添加分隔线
+                            document.add(new Paragraph("------------------------"));
+                            document.add(new Paragraph(" "));
+                        }
+                    }
+                    noteCursor.close();
+                }
+
+                // 添加结束标记
+                Paragraph endParagraph = new Paragraph("--- 备份完成 ---", font);
+                endParagraph.setAlignment(Paragraph.ALIGN_CENTER);
+                document.add(endParagraph);
+
+                document.close();
+                Log.d(TAG, "PDF export completed: " + file.getAbsolutePath());
+                return STATE_SUCCESS;
+
+            } catch (FileNotFoundException e) {
+                Log.e(TAG, "PDF file not found: " + e.getMessage(), e);
+                return STATE_SYSTEM_ERROR;
+            } catch (DocumentException e) {
+                Log.e(TAG, "PDF document error: " + e.getMessage(), e);
+                return STATE_SYSTEM_ERROR;
+            } catch (IOException e) {
+                Log.e(TAG, "PDF IO error or font error: " + e.getMessage(), e);
+                return STATE_SYSTEM_ERROR;
+            } catch (Exception e) {
+                Log.e(TAG, "PDF export error: " + e.getMessage(), e);
+                return STATE_SYSTEM_ERROR;
+            } finally {
+                // 确保关闭文档
+                if (document != null && document.isOpen()) {
+                    document.close();
+                }
+
+                // 确保关闭输出流
+                if (fos != null) {
+                    try {
+                        fos.close();
+                    } catch (IOException e) {
+                        Log.e(TAG, "Error closing file output stream: " + e.getMessage(), e);
+                    }
+                }
+            }
+        }
+
+        /**
+         * 导出单条笔记到PDF
+         * @param noteId 笔记ID
+         * @param document PDF文档对象
+         * @param font PDF字体
+         * @param isInFolder 是否在文件夹中（控制格式）
+         */
+        private void exportNoteToPdf(String noteId, Document document, Font font, boolean isInFolder) {
+            Cursor dataCursor = null;
+
+            try {
+                dataCursor = mContext.getContentResolver().query(
+                        Notes.CONTENT_DATA_URI,
+                        DATA_PROJECTION,
+                        DataColumns.NOTE_ID + "=?",
+                        new String[]{noteId},
+                        null
+                );
+
+                if (dataCursor != null) {
+                    while (dataCursor.moveToNext()) {
+                        String mimeType = dataCursor.getString(DATA_COLUMN_MIME_TYPE);
+                        String content = dataCursor.getString(DATA_COLUMN_CONTENT);
+
+                        if (DataConstants.CALL_NOTE.equals(mimeType)) {
+                            // 处理通话记录笔记
+                            String phone = dataCursor.getString(DATA_COLUMN_PHONE_NUMBER);
+                            long callDate = dataCursor.getLong(DATA_COLUMN_CALL_DATE);
+                            String location = dataCursor.getString(DATA_COLUMN_CONTENT);
+
+                            // 添加电话号码
+                            if (!TextUtils.isEmpty(phone)) {
+                                Paragraph phoneParagraph = new Paragraph("电话号码：" + phone, font);
+                                document.add(phoneParagraph);
+                            }
+
+                            // 添加通话时间
+                            String callDateStr = DateFormat.format(
+                                    mContext.getString(R.string.format_datetime_mdhm),
+                                    callDate).toString();
+                            Paragraph dateParagraph = new Paragraph("通话时间：" + callDateStr, font);
+                            document.add(dateParagraph);
+
+                            // 添加通话地点
+                            if (!TextUtils.isEmpty(location)) {
+                                Paragraph locationParagraph = new Paragraph("通话地点：" + location, font);
+                                document.add(locationParagraph);
+                            }
+
+                            document.add(new Paragraph(" "));
+
+                        } else if (DataConstants.NOTE.equals(mimeType) && !TextUtils.isEmpty(content)) {
+                            // 处理普通文本笔记
+                            Paragraph contentParagraph = new Paragraph(content, font);
+                            document.add(contentParagraph);
+                            document.add(new Paragraph(" "));
+                        }
+                    }
+                }
+
+                // 如果是文件夹内的笔记，添加分隔线
+                if (isInFolder && dataCursor != null && dataCursor.getCount() > 0) {
+                    document.add(new Paragraph("------------------------"));
+                    document.add(new Paragraph(" "));
+                }
+
+            } catch (DocumentException e) {
+                Log.e(TAG, "Error adding paragraph to PDF for note ID: " + noteId, e);
+            } finally {
+                if (dataCursor != null) {
+                    dataCursor.close();
+                }
+            }
+        }
+
+
+
 
         /**
          * 创建导出文件，并返回文件打印流

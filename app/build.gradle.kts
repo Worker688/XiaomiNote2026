@@ -83,4 +83,11 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp-urlconnection:4.12.0")
 // 新增这行
 
+
+    //新增为了转pdf - 核心库
+    implementation("com.itextpdf:itextpdf:5.5.13.3")
+    // 添加中文字体支持
+    implementation("com.itextpdf:itext-asian:5.2.0")
+
+
 }
