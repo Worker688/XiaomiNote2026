@@ -338,6 +338,8 @@ public class NotesListActivity extends Activity implements OnClickListener, OnIt
                 builder.show();
             } else if (itemId == R.id.move) {
                 startQueryDestinationFolders();
+            } else if(itemId == R.id.action_export_pdf){
+                exportPdf();
             }
             return true;
         }
@@ -927,4 +929,39 @@ public class NotesListActivity extends Activity implements OnClickListener, OnIt
         }
         return false;
     }
+
+
+
+    //初始页菜单
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        // 加载你修改的布局文件：note_list.xml
+        getMenuInflater().inflate(R.menu.note_list, menu);
+        return true; // 必须返回 true！
+    }
+
+
+
+    //新增
+    // 导出PDF方法
+    private void exportPdf() {
+        BackupUtils backupUtils = BackupUtils.getInstance(this);
+        int result = backupUtils.exportToPdf();
+
+        switch (result) {
+            case BackupUtils.STATE_SUCCESS:
+                Toast.makeText(this, "PDF导出成功！\n文件保存在 /sdcard/notes/ 目录", Toast.LENGTH_LONG).show();
+                break;
+            case BackupUtils.STATE_SD_CARD_UNMOUONTED:
+                Toast.makeText(this, "错误：SD卡未挂载", Toast.LENGTH_SHORT).show();
+                break;
+            case BackupUtils.STATE_SYSTEM_ERROR:
+                Toast.makeText(this, "错误：系统异常，导出失败", Toast.LENGTH_SHORT).show();
+                break;
+            default:
+                Toast.makeText(this, "导出失败", Toast.LENGTH_SHORT).show();
+                break;
+        }
+    }
+
 }

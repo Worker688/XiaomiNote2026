@@ -51,6 +51,8 @@ android {
                 "META-INF/NOTICE.txt",
 
             ))
+
+            pickFirsts.add("com/itextpdf/text/pdf/fonts/cmap_info.txt")
         }
     }
 
@@ -87,7 +89,7 @@ dependencies {
     //新增为了转pdf - 核心库
     implementation("com.itextpdf:itextpdf:5.5.13.3")
     // 添加中文字体支持
-    implementation("com.itextpdf:itext-asian:5.2.0")
+    //implementation("com.itextpdf:itext-asian:5.2.0")
 
 
 }

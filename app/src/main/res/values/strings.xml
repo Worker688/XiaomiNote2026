@@ -129,6 +129,8 @@
 
     <string name="file_name_pdf_format" translatable="false">备份_%s.pdf</string>
 
+    <string name="menu_export_pdf" translatable="false">导出为PDF</string>
+
     <plurals name="search_results_title">
          <item quantity="one"><xliff:g id="number" example="1">%1$s</xliff:g> result for \"<xliff:g id="search" example="???">%2$s</xliff:g>\"</item>
         <!-- Case of 0 or 2 or more results. -->

@@ -71,6 +71,11 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import com.itextpdf.text.Document;
+import com.itextpdf.text.Font;
+import com.itextpdf.text.Paragraph;
+import com.itextpdf.text.pdf.PdfWriter;
+
 
 public class NoteEditActivity extends Activity implements OnClickListener,
         NoteSettingChangedListener, OnTextViewChangeListener {
@@ -550,6 +555,8 @@ public class NoteEditActivity extends Activity implements OnClickListener,
 
         } else if (itemId == R.id.menu_delete_remind) {
             mWorkingNote.setAlertDate(0, false);
+        } else if (itemId == R.id.menu_export_pdf) {
+            exportCurrentNoteToPdf();
         }
 
         return true;
@@ -625,7 +632,8 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         if (mWorkingNote.getNoteId() > 0) {
             Intent intent = new Intent(this, AlarmReceiver.class);
             intent.setData(ContentUris.withAppendedId(Notes.CONTENT_NOTE_URI, mWorkingNote.getNoteId()));
-            PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 0, intent, 0);
+            // 适配Android 12+，添加FLAG_IMMUTABLE（闹钟类PendingIntent用不可变更安全）
+            PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_IMMUTABLE);
             AlarmManager alarmManager = ((AlarmManager) getSystemService(ALARM_SERVICE));
             showAlertHeader();
             if(!set) {
@@ -871,5 +879,115 @@ public class NoteEditActivity extends Activity implements OnClickListener,
 
     private void showToast(int resId, int duration) {
         Toast.makeText(this, resId, duration).show();
+    }
+
+
+    // ===================== 导出当前笔记为PDF =====================
+    private void exportCurrentNoteToPdf() {
+        // 1. 先检查权限，没有就直接退出（会自动弹窗申请）
+        if (!checkStoragePermission()) {
+            return;
+        }
+
+        try {
+            // 先确保内容已保存
+            getWorkingText();
+            String content = mWorkingNote.getContent();
+
+            // 2. 【修复路径创建失败】最稳路径 + 强制创建
+            java.io.File dir = getExternalFilesDir("Notes"); // 系统给的目录
+            if (!dir.exists()) {
+                boolean created = dir.mkdirs(); // 这里加了返回值，确保一定创建成功
+                if (!created) {
+                    runOnUiThread(() -> Toast.makeText(this, "文件夹创建失败", Toast.LENGTH_SHORT).show());
+                    return;
+                }
+            }
+
+            // 3. 文件名
+            String fileName = "note_" + mWorkingNote.getNoteId() + ".pdf";
+            java.io.File pdfFile = new java.io.File(dir, fileName);
+
+            // 4. 【修复 iText 崩溃】使用 Android 自带 PdfDocument，零依赖、零报错、零冲突
+            android.graphics.pdf.PdfDocument document = new android.graphics.pdf.PdfDocument();
+
+            // 定义A4页面大小
+            android.graphics.pdf.PdfDocument.PageInfo pageInfo = new android.graphics.pdf.PdfDocument.PageInfo.Builder(595, 842, 1).create();
+            android.graphics.pdf.PdfDocument.Page page = document.startPage(pageInfo);
+            android.graphics.Canvas canvas = page.getCanvas();
+            android.graphics.Paint paint = new android.graphics.Paint();
+            paint.setTextSize(14);
+            paint.setAntiAlias(true);
+
+            // 标题
+            canvas.drawText("小米笔记", 40, 50, paint);
+            canvas.drawText("------------------------", 40, 70, paint);
+
+            // 内容分行绘制（解决长文本崩溃）
+            int yPos = 100;
+            String[] lines = content.split("\n");
+            for (String line : lines) {
+                if (yPos > 800) {
+                    // 换一页
+                    document.finishPage(page);
+                    pageInfo = new android.graphics.pdf.PdfDocument.PageInfo.Builder(595, 842, document.getPages().size() + 1).create();
+                    page = document.startPage(pageInfo);
+                    canvas = page.getCanvas();
+                    yPos = 50;
+                }
+                canvas.drawText(line, 40, yPos, paint);
+                yPos += 25;
+            }
+
+            document.finishPage(page);
+            document.writeTo(new java.io.FileOutputStream(pdfFile));
+            document.close();
+
+            // 成功提示
+            runOnUiThread(() -> {
+                Toast.makeText(NoteEditActivity.this,
+                        "导出成功！\n路径：内部存储/Notes/" + fileName,
+                        Toast.LENGTH_LONG).show();
+            });
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            runOnUiThread(() -> {
+                Toast.makeText(NoteEditActivity.this, "导出失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
+            });
+        }
+    }
+
+
+    // 权限申请代码
+    private static final int REQUEST_CODE_STORAGE = 100;
+
+    private boolean checkStoragePermission() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            if (checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                return true;
+            } else {
+                requestPermissions(new String[]{
+                        android.Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                        android.Manifest.permission.READ_EXTERNAL_STORAGE
+                }, REQUEST_CODE_STORAGE);
+                return false;
+            }
+        } else {
+            return true;
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_CODE_STORAGE) {
+            if (grantResults.length > 0 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                exportCurrentNoteToPdf();
+            } else {
+                Toast.makeText(this, "需要存储权限才能导出PDF", Toast.LENGTH_SHORT).show();
+            }
+        }
     }
 }

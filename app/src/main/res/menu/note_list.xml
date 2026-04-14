@@ -15,7 +15,7 @@
      limitations under the License.
 -->
 
-<menu
+<menu xmlns:tools="http://schemas.android.com/tools"
     xmlns:android="http://schemas.android.com/apk/res/android">
     <item
         android:id="@+id/menu_new_folder"
@@ -24,6 +24,13 @@
     <item
         android:id="@+id/menu_export_text"
         android:title="@string/menu_export_text"/>
+
+    <item
+        android:id="@+id/action_export_pdf"
+        android:title="@string/menu_export_pdf"
+        android:orderInCategory="200"
+        android:showAsAction="never" />
+
 
     <item
         android:id="@+id/menu_sync"
