@@ -14,96 +14,103 @@
  * limitations under the License.
  */
 
-package net.micode.notes.gtask.data;
+package net.micode.notes.gtask.data; // 包声明
 
-import android.content.ContentResolver;
-import android.content.ContentUris;
-import android.content.ContentValues;
-import android.content.Context;
-import android.database.Cursor;
-import android.net.Uri;
-import android.util.Log;
+import android.content.ContentResolver; // 内容解析器，用于访问数据库
+import android.content.ContentUris; // 处理Uri与ID的工具类
+import android.content.ContentValues; // 存储数据库键值对
+import android.content.Context; // 上下文环境
+import android.database.Cursor; // 数据库查询游标
+import android.net.Uri; // 资源定位符
+import android.util.Log; // 日志打印
 
-import net.micode.notes.data.Notes;
-import net.micode.notes.data.Notes.DataColumns;
-import net.micode.notes.data.Notes.DataConstants;
-import net.micode.notes.data.Notes.NoteColumns;
-import net.micode.notes.data.NotesDatabaseHelper.TABLE;
-import net.micode.notes.gtask.exception.ActionFailureException;
+import net.micode.notes.data.Notes; // 便签数据常量
+import net.micode.notes.data.Notes.DataColumns; // 数据表字段
+import net.micode.notes.data.Notes.DataConstants; // 数据类型常量
+import net.micode.notes.data.Notes.NoteColumns; // 便签表字段
+import net.micode.notes.data.NotesDatabaseHelper.TABLE; // 数据库表名
+import net.micode.notes.gtask.exception.ActionFailureException; // 操作失败异常
 
-import org.json.JSONException;
-import org.json.JSONObject;
+import org.json.JSONException; // JSON异常
+import org.json.JSONObject; // JSON对象
 
-
+// 数据库数据操作类，负责与SQLite交互
 public class SqlData {
-    private static final String TAG = SqlData.class.getSimpleName();
+    private static final String TAG = SqlData.class.getSimpleName(); // 日志TAG
 
-    private static final int INVALID_ID = -99999;
+    private static final int INVALID_ID = -99999; // 无效ID常量
 
+    // 数据库查询投影列
     public static final String[] PROJECTION_DATA = new String[] {
             DataColumns.ID, DataColumns.MIME_TYPE, DataColumns.CONTENT, DataColumns.DATA1,
             DataColumns.DATA3
     };
 
-    public static final int DATA_ID_COLUMN = 0;
+    public static final int DATA_ID_COLUMN = 0; // 列索引：ID
 
-    public static final int DATA_MIME_TYPE_COLUMN = 1;
+    public static final int DATA_MIME_TYPE_COLUMN = 1; // 列索引：MIME类型
 
-    public static final int DATA_CONTENT_COLUMN = 2;
+    public static final int DATA_CONTENT_COLUMN = 2; // 列索引：内容
 
-    public static final int DATA_CONTENT_DATA_1_COLUMN = 3;
+    public static final int DATA_CONTENT_DATA_1_COLUMN = 3; // 列索引：DATA1
 
-    public static final int DATA_CONTENT_DATA_3_COLUMN = 4;
+    public static final int DATA_CONTENT_DATA_3_COLUMN = 4; // 列索引：DATA3
 
-    private ContentResolver mContentResolver;
+    private ContentResolver mContentResolver; // 内容解析器实例
 
-    private boolean mIsCreate;
+    private boolean mIsCreate; // 是否为新建数据
 
-    private long mDataId;
+    private long mDataId; // 数据ID
 
-    private String mDataMimeType;
+    private String mDataMimeType; // MIME类型
 
-    private String mDataContent;
+    private String mDataContent; // 内容
 
-    private long mDataContentData1;
+    private long mDataContentData1; // 扩展数据1
 
-    private String mDataContentData3;
+    private String mDataContentData3; // 扩展数据3
 
-    private ContentValues mDiffDataValues;
+    private ContentValues mDiffDataValues; // 待更新的差异数据
 
+    // 构造方法：创建新数据
     public SqlData(Context context) {
-        mContentResolver = context.getContentResolver();
-        mIsCreate = true;
-        mDataId = INVALID_ID;
-        mDataMimeType = DataConstants.NOTE;
-        mDataContent = "";
-        mDataContentData1 = 0;
-        mDataContentData3 = "";
-        mDiffDataValues = new ContentValues();
+        mContentResolver = context.getContentResolver(); // 获取内容解析器
+        mIsCreate = true; // 标记为新建
+        mDataId = INVALID_ID; // 初始化无效ID
+        mDataMimeType = DataConstants.NOTE; // 默认类型为便签
+        mDataContent = ""; // 内容为空
+        mDataContentData1 = 0; // 扩展数据1为0
+        mDataContentData3 = ""; // 扩展数据3为空
+        mDiffDataValues = new ContentValues(); // 初始化差异数据
     }
 
+    // 构造方法：从游标加载数据
     public SqlData(Context context, Cursor c) {
-        mContentResolver = context.getContentResolver();
-        mIsCreate = false;
-        loadFromCursor(c);
-        mDiffDataValues = new ContentValues();
+        mContentResolver = context.getContentResolver(); // 获取内容解析器
+        mIsCreate = false; // 标记为已存在
+        loadFromCursor(c); // 从游标加载数据
+        mDiffDataValues = new ContentValues(); // 初始化差异数据
     }
 
+    // 从游标加载数据到成员变量
     private void loadFromCursor(Cursor c) {
-        mDataId = c.getLong(DATA_ID_COLUMN);
-        mDataMimeType = c.getString(DATA_MIME_TYPE_COLUMN);
-        mDataContent = c.getString(DATA_CONTENT_COLUMN);
-        mDataContentData1 = c.getLong(DATA_CONTENT_DATA_1_COLUMN);
-        mDataContentData3 = c.getString(DATA_CONTENT_DATA_3_COLUMN);
+        mDataId = c.getLong(DATA_ID_COLUMN); // 获取ID
+        mDataMimeType = c.getString(DATA_MIME_TYPE_COLUMN); // 获取MIME类型
+        mDataContent = c.getString(DATA_CONTENT_COLUMN); // 获取内容
+        mDataContentData1 = c.getLong(DATA_CONTENT_DATA_1_COLUMN); // 获取DATA1
+        mDataContentData3 = c.getString(DATA_CONTENT_DATA_3_COLUMN); // 获取DATA3
     }
 
+    // 从JSON设置数据内容
     public void setContent(JSONObject js) throws JSONException {
+        // 解析并设置ID
         long dataId = js.has(DataColumns.ID) ? js.getLong(DataColumns.ID) : INVALID_ID;
         if (mIsCreate || mDataId != dataId) {
             mDiffDataValues.put(DataColumns.ID, dataId);
         }
         mDataId = dataId;
 
+        // 解析并设置MIME类型
         String dataMimeType = js.has(DataColumns.MIME_TYPE) ? js.getString(DataColumns.MIME_TYPE)
                 : DataConstants.NOTE;
         if (mIsCreate || !mDataMimeType.equals(dataMimeType)) {
@@ -111,18 +118,21 @@ public class SqlData {
         }
         mDataMimeType = dataMimeType;
 
+        // 解析并设置内容
         String dataContent = js.has(DataColumns.CONTENT) ? js.getString(DataColumns.CONTENT) : "";
         if (mIsCreate || !mDataContent.equals(dataContent)) {
             mDiffDataValues.put(DataColumns.CONTENT, dataContent);
         }
         mDataContent = dataContent;
 
+        // 解析并设置DATA1
         long dataContentData1 = js.has(DataColumns.DATA1) ? js.getLong(DataColumns.DATA1) : 0;
         if (mIsCreate || mDataContentData1 != dataContentData1) {
             mDiffDataValues.put(DataColumns.DATA1, dataContentData1);
         }
         mDataContentData1 = dataContentData1;
 
+        // 解析并设置DATA3
         String dataContentData3 = js.has(DataColumns.DATA3) ? js.getString(DataColumns.DATA3) : "";
         if (mIsCreate || !mDataContentData3.equals(dataContentData3)) {
             mDiffDataValues.put(DataColumns.DATA3, dataContentData3);
@@ -130,6 +140,7 @@ public class SqlData {
         mDataContentData3 = dataContentData3;
     }
 
+    // 将数据转为JSON
     public JSONObject getContent() throws JSONException {
         if (mIsCreate) {
             Log.e(TAG, "it seems that we haven't created this in database yet");
@@ -144,9 +155,10 @@ public class SqlData {
         return js;
     }
 
+    // 提交数据到数据库
     public void commit(long noteId, boolean validateVersion, long version) {
 
-        if (mIsCreate) {
+        if (mIsCreate) { // 新建数据
             if (mDataId == INVALID_ID && mDiffDataValues.containsKey(DataColumns.ID)) {
                 mDiffDataValues.remove(DataColumns.ID);
             }
@@ -159,7 +171,7 @@ public class SqlData {
                 Log.e(TAG, "Get note id error :" + e.toString());
                 throw new ActionFailureException("create note failed");
             }
-        } else {
+        } else { // 更新数据
             if (mDiffDataValues.size() > 0) {
                 int result = 0;
                 if (!validateVersion) {
@@ -167,7 +179,7 @@ public class SqlData {
                             Notes.CONTENT_DATA_URI, mDataId), mDiffDataValues, null, null);
                 } else {
                     result = mContentResolver.update(ContentUris.withAppendedId(
-                            Notes.CONTENT_DATA_URI, mDataId), mDiffDataValues,
+                                    Notes.CONTENT_DATA_URI, mDataId), mDiffDataValues,
                             " ? in (SELECT " + NoteColumns.ID + " FROM " + TABLE.NOTE
                                     + " WHERE " + NoteColumns.VERSION + "=?)", new String[] {
                                     String.valueOf(noteId), String.valueOf(version)
@@ -179,10 +191,11 @@ public class SqlData {
             }
         }
 
-        mDiffDataValues.clear();
-        mIsCreate = false;
+        mDiffDataValues.clear(); // 清空差异数据
+        mIsCreate = false; // 标记为已保存
     }
 
+    // 获取数据ID
     public long getId() {
         return mDataId;
     }
