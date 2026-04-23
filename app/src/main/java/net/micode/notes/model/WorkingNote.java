@@ -31,37 +31,46 @@ import net.micode.notes.data.Notes.NoteColumns;
 import net.micode.notes.data.Notes.TextNote;
 import net.micode.notes.tool.ResourceParser.NoteBgResources;
 
-
+/**
+ * 工作便签类（核心业务类）
+ * 作用：封装【当前正在编辑/查看】的单条便签的所有业务逻辑
+ * 负责：从数据库加载便签、编辑内容、保存修改、监听便签设置变化、桌面小部件关联
+ * 是 UI 层与数据模型（Note）之间的桥梁
+ */
 public class WorkingNote {
-    // Note for the working note
+    // 数据模型对象（负责底层数据库操作）
     private Note mNote;
-    // Note Id
+    // 当前便签ID
     private long mNoteId;
-    // Note content
+    // 便签文本内容
     private String mContent;
-    // Note mode
+    // 便签模式：普通/清单模式
     private int mMode;
 
+    // 提醒时间
     private long mAlertDate;
-
+    // 修改时间
     private long mModifiedDate;
-
+    // 背景色ID
     private int mBgColorId;
-
+    // 绑定的桌面小部件ID
     private int mWidgetId;
-
+    // 桌面小部件类型
     private int mWidgetType;
-
+    // 所属文件夹ID
     private long mFolderId;
 
+    // 上下文
     private Context mContext;
-
+    // 日志TAG
     private static final String TAG = "WorkingNote";
-
+    // 标记是否已删除
     private boolean mIsDeleted;
-
+    // 便签设置变化监听器（背景色、提醒、清单模式等）
     private NoteSettingChangedListener mNoteSettingStatusListener;
 
+    // ====================== 数据库查询投影 ======================
+    // 查询 data 表需要的字段（ID、内容、类型、模式等）
     public static final String[] DATA_PROJECTION = new String[] {
             DataColumns.ID,
             DataColumns.CONTENT,
@@ -72,6 +81,7 @@ public class WorkingNote {
             DataColumns.DATA4,
     };
 
+    // 查询 note 表需要的字段（文件夹、提醒、背景色、小部件等）
     public static final String[] NOTE_PROJECTION = new String[] {
             NoteColumns.PARENT_ID,
             NoteColumns.ALERTED_DATE,
@@ -81,56 +91,65 @@ public class WorkingNote {
             NoteColumns.MODIFIED_DATE
     };
 
+    // ====================== 字段索引常量 ======================
+    // data 表索引
     private static final int DATA_ID_COLUMN = 0;
-
     private static final int DATA_CONTENT_COLUMN = 1;
-
     private static final int DATA_MIME_TYPE_COLUMN = 2;
-
     private static final int DATA_MODE_COLUMN = 3;
 
+    // note 表索引
     private static final int NOTE_PARENT_ID_COLUMN = 0;
-
     private static final int NOTE_ALERTED_DATE_COLUMN = 1;
-
     private static final int NOTE_BG_COLOR_ID_COLUMN = 2;
-
     private static final int NOTE_WIDGET_ID_COLUMN = 3;
-
     private static final int NOTE_WIDGET_TYPE_COLUMN = 4;
-
     private static final int NOTE_MODIFIED_DATE_COLUMN = 5;
 
-    // New note construct
+    /**
+     * 构造方法：创建【新空白便签】
+     * @param context 上下文
+     * @param folderId 所属文件夹ID
+     */
     private WorkingNote(Context context, long folderId) {
         mContext = context;
-        mAlertDate = 0;
-        mModifiedDate = System.currentTimeMillis();
-        mFolderId = folderId;
-        mNote = new Note();
-        mNoteId = 0;
-        mIsDeleted = false;
-        mMode = 0;
-        mWidgetType = Notes.TYPE_WIDGET_INVALIDE;
+        mAlertDate = 0;          // 默认无提醒
+        mModifiedDate = System.currentTimeMillis(); // 修改时间为当前时间
+        mFolderId = folderId;    // 所属文件夹
+        mNote = new Note();      // 初始化数据模型
+        mNoteId = 0;             // 新便签ID为0（未存入数据库）
+        mIsDeleted = false;      // 未删除
+        mMode = 0;               // 默认普通模式
+        mWidgetType = Notes.TYPE_WIDGET_INVALIDE; // 默认无桌面小部件
     }
 
-    // Existing note construct
+    /**
+     * 构造方法：加载【数据库中已存在的便签】
+     * @param context 上下文
+     * @param noteId 便签ID
+     * @param folderId 文件夹ID
+     */
     private WorkingNote(Context context, long noteId, long folderId) {
         mContext = context;
         mNoteId = noteId;
         mFolderId = folderId;
         mIsDeleted = false;
         mNote = new Note();
-        loadNote();
+        loadNote(); // 从数据库加载便签信息
     }
 
+    /**
+     * 加载便签基础信息（文件夹、背景色、小部件、提醒等）
+     */
     private void loadNote() {
+        // 查询 note 表
         Cursor cursor = mContext.getContentResolver().query(
                 ContentUris.withAppendedId(Notes.CONTENT_NOTE_URI, mNoteId), NOTE_PROJECTION, null,
                 null, null);
 
         if (cursor != null) {
             if (cursor.moveToFirst()) {
+                // 读取字段值
                 mFolderId = cursor.getLong(NOTE_PARENT_ID_COLUMN);
                 mBgColorId = cursor.getInt(NOTE_BG_COLOR_ID_COLUMN);
                 mWidgetId = cursor.getInt(NOTE_WIDGET_ID_COLUMN);
@@ -143,26 +162,36 @@ public class WorkingNote {
             Log.e(TAG, "No note with id:" + mNoteId);
             throw new IllegalArgumentException("Unable to find note with id " + mNoteId);
         }
+        // 继续加载便签内容数据
         loadNoteData();
     }
 
+    /**
+     * 加载便签内容数据（文本、通话记录）
+     */
     private void loadNoteData() {
+        // 根据 noteId 查询 data 表
         Cursor cursor = mContext.getContentResolver().query(Notes.CONTENT_DATA_URI, DATA_PROJECTION,
                 DataColumns.NOTE_ID + "=?", new String[] {
-                    String.valueOf(mNoteId)
+                        String.valueOf(mNoteId)
                 }, null);
 
         if (cursor != null) {
             if (cursor.moveToFirst()) {
                 do {
                     String type = cursor.getString(DATA_MIME_TYPE_COLUMN);
+                    // 普通文本便签
                     if (DataConstants.NOTE.equals(type)) {
                         mContent = cursor.getString(DATA_CONTENT_COLUMN);
                         mMode = cursor.getInt(DATA_MODE_COLUMN);
                         mNote.setTextDataId(cursor.getLong(DATA_ID_COLUMN));
-                    } else if (DataConstants.CALL_NOTE.equals(type)) {
+                    }
+                    // 通话记录便签
+                    else if (DataConstants.CALL_NOTE.equals(type)) {
                         mNote.setCallDataId(cursor.getLong(DATA_ID_COLUMN));
-                    } else {
+                    }
+                    // 未知类型
+                    else {
                         Log.d(TAG, "Wrong note type with type:" + type);
                     }
                 } while (cursor.moveToNext());
@@ -174,8 +203,12 @@ public class WorkingNote {
         }
     }
 
+    /**
+     * 静态方法：创建空白新便签（供外部调用）
+     * 用于从桌面小部件创建新便签
+     */
     public static WorkingNote createEmptyNote(Context context, long folderId, int widgetId,
-            int widgetType, int defaultBgColorId) {
+                                              int widgetType, int defaultBgColorId) {
         WorkingNote note = new WorkingNote(context, folderId);
         note.setBgColorId(defaultBgColorId);
         note.setWidgetId(widgetId);
@@ -183,12 +216,21 @@ public class WorkingNote {
         return note;
     }
 
+    /**
+     * 静态方法：根据ID从数据库加载已有便签
+     */
     public static WorkingNote load(Context context, long id) {
         return new WorkingNote(context, id, 0);
     }
 
+    /**
+     * 同步保存便签到数据库（核心保存方法）
+     * @return 保存成功/失败
+     */
     public synchronized boolean saveNote() {
+        // 判断是否需要保存
         if (isWorthSaving()) {
+            // 不存在数据库 → 创建新便签并获取ID
             if (!existInDatabase()) {
                 if ((mNoteId = Note.getNewNoteId(mContext, mFolderId)) == 0) {
                     Log.e(TAG, "Create new note fail with id:" + mNoteId);
@@ -196,11 +238,10 @@ public class WorkingNote {
                 }
             }
 
+            // 调用数据模型同步到数据库
             mNote.syncNote(mContext, mNoteId);
 
-            /**
-             * Update widget content if there exist any widget of this note
-             */
+            // 如果绑定了桌面小部件 → 更新小部件显示
             if (mWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID
                     && mWidgetType != Notes.TYPE_WIDGET_INVALIDE
                     && mNoteSettingStatusListener != null) {
@@ -212,10 +253,20 @@ public class WorkingNote {
         }
     }
 
+    /**
+     * 判断便签是否已存在于数据库（ID>0表示已保存）
+     */
     public boolean existInDatabase() {
         return mNoteId > 0;
     }
 
+    /**
+     * 判断是否需要执行保存操作
+     * 不需要保存的情况：
+     * 1. 已删除
+     * 2. 新建便签但内容为空
+     * 3. 已存在但无任何修改
+     */
     private boolean isWorthSaving() {
         if (mIsDeleted || (!existInDatabase() && TextUtils.isEmpty(mContent))
                 || (existInDatabase() && !mNote.isLocalModified())) {
@@ -225,10 +276,18 @@ public class WorkingNote {
         }
     }
 
+    /**
+     * 设置便签设置变化监听器
+     */
     public void setOnSettingStatusChangedListener(NoteSettingChangedListener l) {
         mNoteSettingStatusListener = l;
     }
 
+    /**
+     * 设置提醒时间
+     * @param date 提醒时间戳
+     * @param set 是否开启提醒
+     */
     public void setAlertDate(long date, boolean set) {
         if (date != mAlertDate) {
             mAlertDate = date;
@@ -239,14 +298,21 @@ public class WorkingNote {
         }
     }
 
+    /**
+     * 标记便签为删除状态
+     */
     public void markDeleted(boolean mark) {
         mIsDeleted = mark;
+        // 删除后更新小部件
         if (mWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID
                 && mWidgetType != Notes.TYPE_WIDGET_INVALIDE && mNoteSettingStatusListener != null) {
-                mNoteSettingStatusListener.onWidgetChanged();
+            mNoteSettingStatusListener.onWidgetChanged();
         }
     }
 
+    /**
+     * 设置便签背景色
+     */
     public void setBgColorId(int id) {
         if (id != mBgColorId) {
             mBgColorId = id;
@@ -257,6 +323,9 @@ public class WorkingNote {
         }
     }
 
+    /**
+     * 设置清单模式/普通模式
+     */
     public void setCheckListMode(int mode) {
         if (mMode != mode) {
             if (mNoteSettingStatusListener != null) {
@@ -267,6 +336,9 @@ public class WorkingNote {
         }
     }
 
+    /**
+     * 设置桌面小部件类型
+     */
     public void setWidgetType(int type) {
         if (type != mWidgetType) {
             mWidgetType = type;
@@ -274,6 +346,9 @@ public class WorkingNote {
         }
     }
 
+    /**
+     * 设置桌面小部件ID
+     */
     public void setWidgetId(int id) {
         if (id != mWidgetId) {
             mWidgetId = id;
@@ -281,6 +356,9 @@ public class WorkingNote {
         }
     }
 
+    /**
+     * 设置便签文本内容（编辑时调用）
+     */
     public void setWorkingText(String text) {
         if (!TextUtils.equals(mContent, text)) {
             mContent = text;
@@ -288,16 +366,24 @@ public class WorkingNote {
         }
     }
 
+    /**
+     * 转换为通话记录便签
+     * 自动存入通话号码、日期，并移动到通话记录文件夹
+     */
     public void convertToCallNote(String phoneNumber, long callDate) {
         mNote.setCallData(CallNote.CALL_DATE, String.valueOf(callDate));
         mNote.setCallData(CallNote.PHONE_NUMBER, phoneNumber);
         mNote.setNoteValue(NoteColumns.PARENT_ID, String.valueOf(Notes.ID_CALL_RECORD_FOLDER));
     }
 
+    /**
+     * 判断是否设置了提醒
+     */
     public boolean hasClockAlert() {
         return (mAlertDate > 0 ? true : false);
     }
 
+    // ====================== 各种 Getter 方法 ======================
     public String getContent() {
         return mContent;
     }
@@ -310,6 +396,7 @@ public class WorkingNote {
         return mModifiedDate;
     }
 
+    // 获取背景色资源ID
     public int getBgColorResId() {
         return NoteBgResources.getNoteBgResource(mBgColorId);
     }
@@ -318,6 +405,7 @@ public class WorkingNote {
         return mBgColorId;
     }
 
+    // 获取标题栏背景资源ID
     public int getTitleBgResId() {
         return NoteBgResources.getNoteTitleBgResource(mBgColorId);
     }
@@ -342,27 +430,18 @@ public class WorkingNote {
         return mWidgetType;
     }
 
+    /**
+     * 便签设置变化监听器接口
+     * 用于 UI 层监听便签状态变化并刷新界面
+     */
     public interface NoteSettingChangedListener {
-        /**
-         * Called when the background color of current note has just changed
-         */
+        // 背景色改变
         void onBackgroundColorChanged();
-
-        /**
-         * Called when user set clock
-         */
+        // 提醒设置改变
         void onClockAlertChanged(long date, boolean set);
-
-        /**
-         * Call when user create note from widget
-         */
+        // 桌面小部件改变
         void onWidgetChanged();
-
-        /**
-         * Call when switch between check list mode and normal mode
-         * @param oldMode is previous mode before change
-         * @param newMode is new mode
-         */
+        // 清单/普通模式切换
         void onCheckListModeChanged(int oldMode, int newMode);
     }
 }
