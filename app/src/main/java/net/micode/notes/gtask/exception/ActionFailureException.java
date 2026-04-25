@@ -16,17 +16,22 @@
 
 package net.micode.notes.gtask.exception;
 
+// 操作失败异常类，继承自运行时异常
 public class ActionFailureException extends RuntimeException {
+    // 序列化版本ID
     private static final long serialVersionUID = 4425249765923293627L;
 
+    // 无参构造方法
     public ActionFailureException() {
         super();
     }
 
+    // 带异常信息的构造方法
     public ActionFailureException(String paramString) {
         super(paramString);
     }
 
+    // 带异常信息和异常原因的构造方法
     public ActionFailureException(String paramString, Throwable paramThrowable) {
         super(paramString, paramThrowable);
     }

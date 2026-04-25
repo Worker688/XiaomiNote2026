@@ -16,17 +16,22 @@
 
 package net.micode.notes.gtask.exception;
 
+// 网络操作失败异常类
 public class NetworkFailureException extends Exception {
+    // 序列化版本唯一标识
     private static final long serialVersionUID = 2107610287180234136L;
 
+    // 无参构造函数
     public NetworkFailureException() {
         super();
     }
 
+    // 带异常信息的构造函数
     public NetworkFailureException(String paramString) {
         super(paramString);
     }
 
+    // 带异常信息和异常原因的构造函数
     public NetworkFailureException(String paramString, Throwable paramThrowable) {
         super(paramString, paramThrowable);
     }
