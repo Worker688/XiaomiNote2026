@@ -37,15 +37,24 @@ import net.micode.notes.R;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * 自定义的 EditText，用于笔记编辑界面中的普通文本编辑或待办清单中的每一条目。
+ * 主要功能：
+ * 1. 在待办清单模式下支持通过回车键创建新条目、通过删除键删除空条目。
+ * 2. 提供触摸定位文本光标的能力。
+ * 3. 为文本中的超链接（电话、网址、邮箱）提供长按弹出菜单并跳转。
+ */
 public class NoteEditText extends EditText {
     private static final String TAG = "NoteEditText";
-    private int mIndex;
-    private int mSelectionStartBeforeDelete;
+    private int mIndex;                      // 当前编辑条目在清单列表中的索引
+    private int mSelectionStartBeforeDelete; // 删除光标前的位置，用于判断是否在行首删除
 
+    // 支持的超链接协议
     private static final String SCHEME_TEL = "tel:" ;
     private static final String SCHEME_HTTP = "http:" ;
     private static final String SCHEME_EMAIL = "mailto:" ;
 
+    // 协议对应的菜单项文本资源 ID 映射表
     private static final Map<String, Integer> sSchemaActionResMap = new HashMap<String, Integer>();
     static {
         sSchemaActionResMap.put(SCHEME_TEL, R.string.note_link_tel);
@@ -54,38 +63,49 @@ public class NoteEditText extends EditText {
     }
 
     /**
-     * Call by the {@link NoteEditActivity} to delete or add edit text
+     * 文本变化监听接口，用于与 NoteEditActivity 交互
      */
     public interface OnTextViewChangeListener {
         /**
-         * Delete current edit text when {@link KeyEvent#KEYCODE_DEL} happens
-         * and the text is null
+         * 当文本为空且按下删除键时，通知 Activity 删除当前 EditText
+         * @param index 当前条目索引
+         * @param text  当前文本内容
          */
         void onEditTextDelete(int index, String text);
 
         /**
-         * Add edit text after current edit text when {@link KeyEvent#KEYCODE_ENTER}
-         * happen
+         * 当按下回车键时，通知 Activity 在当前条目后方新增一个空白条目
+         * @param index 新增条目的位置索引
+         * @param text  当前光标之后的文本（将被移动到新条目中）
          */
         void onEditTextEnter(int index, String text);
 
         /**
-         * Hide or show item option when text change
+         * 当文本内容变化时，通知 Activity 显示或隐藏条目的复选框（清单模式下）
+         * @param index   条目索引
+         * @param hasText 当前条目是否有文本内容
          */
         void onTextChange(int index, boolean hasText);
     }
 
     private OnTextViewChangeListener mOnTextViewChangeListener;
 
+    // 构造方法
     public NoteEditText(Context context) {
         super(context, null);
         mIndex = 0;
     }
 
+    /**
+     * 设置当前条目在清单列表中的索引
+     */
     public void setIndex(int index) {
         mIndex = index;
     }
 
+    /**
+     * 设置文本变化监听器
+     */
     public void setOnTextViewChangeListener(OnTextViewChangeListener listener) {
         mOnTextViewChangeListener = listener;
     }
@@ -96,14 +116,16 @@ public class NoteEditText extends EditText {
 
     public NoteEditText(Context context, AttributeSet attrs, int defStyle) {
         super(context, attrs, defStyle);
-        // TODO Auto-generated constructor stub
     }
 
+    /**
+     * 重写触摸事件，实现点击文本任意位置时自动定位光标到手指点击处
+     */
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         switch (event.getAction()) {
             case MotionEvent.ACTION_DOWN:
-
+                // 获取点击位置的坐标（考虑内边距和滚动偏移）
                 int x = (int) event.getX();
                 int y = (int) event.getY();
                 x -= getTotalPaddingLeft();
@@ -114,22 +136,26 @@ public class NoteEditText extends EditText {
                 Layout layout = getLayout();
                 int line = layout.getLineForVertical(y);
                 int off = layout.getOffsetForHorizontal(line, x);
-                Selection.setSelection(getText(), off);
+                Selection.setSelection(getText(), off); // 将光标设置到该位置
                 break;
         }
-
         return super.onTouchEvent(event);
     }
 
+    /**
+     * 按键按下时的处理：仅记录删除键按下时的光标位置，以备后续判断
+     */
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         switch (keyCode) {
             case KeyEvent.KEYCODE_ENTER:
+                // 如果设置了监听器，则返回 false 让 onKeyUp 处理回车事件（实现分行业务）
                 if (mOnTextViewChangeListener != null) {
                     return false;
                 }
                 break;
             case KeyEvent.KEYCODE_DEL:
+                // 记录删除前的光标起始位置，用于判断是否位于行首且无字符
                 mSelectionStartBeforeDelete = getSelectionStart();
                 break;
             default:
@@ -138,11 +164,16 @@ public class NoteEditText extends EditText {
         return super.onKeyDown(keyCode, event);
     }
 
+    /**
+     * 按键弹起时的处理：实现删除空行和回车换行创建新条目的逻辑
+     */
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         switch(keyCode) {
             case KeyEvent.KEYCODE_DEL:
                 if (mOnTextViewChangeListener != null) {
+                    // 如果光标位于第一个字符之前（selectionStart == 0）且不是第一条（mIndex != 0）
+                    // 则说明想要删除一个空条目，通知 Activity 删除当前 EditText
                     if (0 == mSelectionStartBeforeDelete && mIndex != 0) {
                         mOnTextViewChangeListener.onEditTextDelete(mIndex, getText().toString());
                         return true;
@@ -153,9 +184,12 @@ public class NoteEditText extends EditText {
                 break;
             case KeyEvent.KEYCODE_ENTER:
                 if (mOnTextViewChangeListener != null) {
+                    // 获取光标之后的所有文本
                     int selectionStart = getSelectionStart();
                     String text = getText().subSequence(selectionStart, length()).toString();
+                    // 将当前 EditText 的文本截断至光标位置
                     setText(getText().subSequence(0, selectionStart));
+                    // 通知 Activity 在当前位置之后新增一个 EditText，并将剩余文本填入新条目
                     mOnTextViewChangeListener.onEditTextEnter(mIndex + 1, text);
                 } else {
                     Log.d(TAG, "OnTextViewChangeListener was not seted");
@@ -167,6 +201,9 @@ public class NoteEditText extends EditText {
         return super.onKeyUp(keyCode, event);
     }
 
+    /**
+     * 当焦点发生变化时，通知 Activity 当前条目是否有文本内容，用于决定是否显示复选框
+     */
     @Override
     protected void onFocusChanged(boolean focused, int direction, Rect previouslyFocusedRect) {
         if (mOnTextViewChangeListener != null) {
@@ -179,6 +216,11 @@ public class NoteEditText extends EditText {
         super.onFocusChanged(focused, direction, previouslyFocusedRect);
     }
 
+    /**
+     * 创建上下文菜单（长按弹出菜单）
+     * 如果选中的文本片段包含且仅包含一个超链接（URLSpan），则根据链接协议（电话/网址/邮箱）显示对应的菜单项，
+     * 用户点击后触发该链接的默认行为（拨号、打开网页、发送邮件等）。
+     */
     @Override
     protected void onCreateContextMenu(ContextMenu menu) {
         if (getText() instanceof Spanned) {
@@ -191,6 +233,7 @@ public class NoteEditText extends EditText {
             final URLSpan[] urls = ((Spanned) getText()).getSpans(min, max, URLSpan.class);
             if (urls.length == 1) {
                 int defaultResId = 0;
+                // 根据 URL 的协议查找对应的菜单文本资源 ID
                 for(String schema: sSchemaActionResMap.keySet()) {
                     if(urls[0].getURL().indexOf(schema) >= 0) {
                         defaultResId = sSchemaActionResMap.get(schema);
@@ -202,10 +245,10 @@ public class NoteEditText extends EditText {
                     defaultResId = R.string.note_link_other;
                 }
 
+                // 添加菜单项，点击时执行 URLSpan 的 onClick 方法（打开对应 Intent）
                 menu.add(0, 0, 0, defaultResId).setOnMenuItemClickListener(
                         new OnMenuItemClickListener() {
                             public boolean onMenuItemClick(MenuItem item) {
-                                // goto a new intent
                                 urls[0].onClick(NoteEditText.this);
                                 return true;
                             }
