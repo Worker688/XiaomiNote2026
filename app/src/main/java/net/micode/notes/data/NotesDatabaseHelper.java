@@ -36,7 +36,7 @@ public class NotesDatabaseHelper extends SQLiteOpenHelper {
     private static final String DB_NAME = "note.db";
 
     // 数据库版本（用于升级）
-    private static final int DB_VERSION = 4;
+    private static final int DB_VERSION = 5;
 
     // 表名常量接口
     public interface TABLE {
@@ -67,7 +67,13 @@ public class NotesDatabaseHelper extends SQLiteOpenHelper {
                     NoteColumns.LOCAL_MODIFIED + " INTEGER NOT NULL DEFAULT 0," + // 本地是否修改
                     NoteColumns.ORIGIN_PARENT_ID + " INTEGER NOT NULL DEFAULT 0," + // 原始父ID
                     NoteColumns.GTASK_ID + " TEXT NOT NULL DEFAULT ''," + // 同步任务ID
-                    NoteColumns.VERSION + " INTEGER NOT NULL DEFAULT 0" + // 数据版本
+                    NoteColumns.VERSION + " INTEGER NOT NULL DEFAULT 0," + // 数据版本
+
+                    NoteColumns.PINNED + " INTEGER NOT NULL DEFAULT 0" + // 【新增】置顶状态：0未置顶，1已置顶
+
+
+
+
                     ")";
 
     // ====================== 创建 data 表（便签内容详情） ======================
@@ -314,6 +320,11 @@ public class NotesDatabaseHelper extends SQLiteOpenHelper {
             oldVersion++;
         }
 
+        if (oldVersion == 4) {
+            upgradeToV5(db);
+            oldVersion++;
+        }
+
         if (reCreateTriggers) {
             reCreateNoteTableTriggers(db);
             reCreateDataTableTriggers(db);
@@ -349,6 +360,12 @@ public class NotesDatabaseHelper extends SQLiteOpenHelper {
     // v3升级v4：增加版本号字段
     private void upgradeToV4(SQLiteDatabase db) {
         db.execSQL("ALTER TABLE " + TABLE.NOTE + " ADD COLUMN " + NoteColumns.VERSION
+                + " INTEGER NOT NULL DEFAULT 0");
+    }
+
+    // 【新增】v4升级v5：增加置顶字段
+    private void upgradeToV5(SQLiteDatabase db) {
+        db.execSQL("ALTER TABLE " + TABLE.NOTE + " ADD COLUMN " + NoteColumns.PINNED
                 + " INTEGER NOT NULL DEFAULT 0");
     }
 }

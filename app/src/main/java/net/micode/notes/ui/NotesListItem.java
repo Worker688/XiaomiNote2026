@@ -32,6 +32,8 @@ import net.micode.notes.tool.ResourceParser.NoteItemBgResources;
 
 public class NotesListItem extends LinearLayout {
     private ImageView mAlert;
+
+    private ImageView mPin;
     private TextView mTitle;
     private TextView mTime;
     private TextView mCallName;
@@ -42,6 +44,8 @@ public class NotesListItem extends LinearLayout {
         super(context);
         inflate(context, R.layout.note_item, this);
         mAlert = (ImageView) findViewById(R.id.iv_alert_icon);
+        mPin = (ImageView) findViewById(R.id.iv_pin_icon);
+
         mTitle = (TextView) findViewById(R.id.tv_title);
         mTime = (TextView) findViewById(R.id.tv_time);
         mCallName = (TextView) findViewById(R.id.tv_name);
@@ -75,6 +79,14 @@ public class NotesListItem extends LinearLayout {
             } else {
                 mAlert.setVisibility(View.GONE);
             }
+
+            // 添加这一段
+            if (data.isPinned()) {
+                mPin.setVisibility(View.VISIBLE);
+            } else {
+                mPin.setVisibility(View.GONE);
+            }
+
         } else {
             mCallName.setVisibility(View.GONE);
             mTitle.setTextAppearance(context, R.style.TextAppearancePrimaryItem);
@@ -92,6 +104,13 @@ public class NotesListItem extends LinearLayout {
                 } else {
                     mAlert.setVisibility(View.GONE);
                 }
+                // 添加这一段
+                if (data.isPinned()) {
+                    mPin.setVisibility(View.VISIBLE);
+                } else {
+                    mPin.setVisibility(View.GONE);
+                }
+
             }
         }
         mTime.setText(DateUtils.getRelativeTimeSpanString(data.getModifiedDate()));

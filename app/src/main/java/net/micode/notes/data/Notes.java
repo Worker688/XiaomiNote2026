@@ -94,6 +94,8 @@ public class Notes {
         public static final String ORIGIN_PARENT_ID = "origin_parent_id"; // 原始父文件夹ID
         public static final String GTASK_ID = "gtask_id";      // 同步任务ID
         public static final String VERSION = "version";         // 数据版本号
+
+        public static final String PINNED = "pinned";//zhiding
     }
 
     // ====================== 便签内容详情表字段 ======================

@@ -40,6 +40,8 @@ public class NoteItemData {
         NoteColumns.TYPE,
         NoteColumns.WIDGET_ID,
         NoteColumns.WIDGET_TYPE,
+            // 添加这一行
+            NoteColumns.PINNED,
     };
 
     private static final int ID_COLUMN                    = 0;
@@ -55,6 +57,9 @@ public class NoteItemData {
     private static final int WIDGET_ID_COLUMN             = 10;
     private static final int WIDGET_TYPE_COLUMN           = 11;
 
+    // 添加这一行
+    private static final int PINNED_COLUMN = 12;
+
     private long mId;
     private long mAlertDate;
     private int mBgColorId;
@@ -67,6 +72,8 @@ public class NoteItemData {
     private int mType;
     private int mWidgetId;
     private int mWidgetType;
+
+    private boolean mPinned;
     private String mName;
     private String mPhoneNumber;
 
@@ -91,6 +98,9 @@ public class NoteItemData {
         mType = cursor.getInt(TYPE_COLUMN);
         mWidgetId = cursor.getInt(WIDGET_ID_COLUMN);
         mWidgetType = cursor.getInt(WIDGET_TYPE_COLUMN);
+
+        // 添加这一行
+        mPinned = (cursor.getInt(PINNED_COLUMN) > 0) ? true : false;
 
         mPhoneNumber = "";
         if (mParentId == Notes.ID_CALL_RECORD_FOLDER) {
@@ -221,4 +231,8 @@ public class NoteItemData {
     public static int getNoteType(Cursor cursor) {
         return cursor.getInt(TYPE_COLUMN);
     }
+
+    public boolean isPinned() {
+        return mPinned;}
+
 }

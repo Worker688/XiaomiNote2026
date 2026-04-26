@@ -60,6 +60,9 @@ public class WorkingNote {
     // 所属文件夹ID
     private long mFolderId;
 
+    // 【新增】置顶状态
+    private boolean mPinned;
+
     // 上下文
     private Context mContext;
     // 日志TAG
@@ -82,13 +85,15 @@ public class WorkingNote {
     };
 
     // 查询 note 表需要的字段（文件夹、提醒、背景色、小部件等）
+    // 【修改】添加了 PINNED 字段
     public static final String[] NOTE_PROJECTION = new String[] {
             NoteColumns.PARENT_ID,
             NoteColumns.ALERTED_DATE,
             NoteColumns.BG_COLOR_ID,
             NoteColumns.WIDGET_ID,
             NoteColumns.WIDGET_TYPE,
-            NoteColumns.MODIFIED_DATE
+            NoteColumns.MODIFIED_DATE,
+            NoteColumns.PINNED // 【新增】
     };
 
     // ====================== 字段索引常量 ======================
@@ -105,6 +110,7 @@ public class WorkingNote {
     private static final int NOTE_WIDGET_ID_COLUMN = 3;
     private static final int NOTE_WIDGET_TYPE_COLUMN = 4;
     private static final int NOTE_MODIFIED_DATE_COLUMN = 5;
+    private static final int NOTE_PINNED_COLUMN = 6; // 【新增】
 
     /**
      * 构造方法：创建【新空白便签】
@@ -120,6 +126,7 @@ public class WorkingNote {
         mNoteId = 0;             // 新便签ID为0（未存入数据库）
         mIsDeleted = false;      // 未删除
         mMode = 0;               // 默认普通模式
+        mPinned = false;         // 【新增】默认不置顶
         mWidgetType = Notes.TYPE_WIDGET_INVALIDE; // 默认无桌面小部件
     }
 
@@ -134,6 +141,7 @@ public class WorkingNote {
         mNoteId = noteId;
         mFolderId = folderId;
         mIsDeleted = false;
+        mPinned = false; // 【新增】初始化默认值
         mNote = new Note();
         loadNote(); // 从数据库加载便签信息
     }
@@ -156,6 +164,8 @@ public class WorkingNote {
                 mWidgetType = cursor.getInt(NOTE_WIDGET_TYPE_COLUMN);
                 mAlertDate = cursor.getLong(NOTE_ALERTED_DATE_COLUMN);
                 mModifiedDate = cursor.getLong(NOTE_MODIFIED_DATE_COLUMN);
+                // 【新增】读取置顶状态
+                mPinned = cursor.getInt(NOTE_PINNED_COLUMN) > 0;
             }
             cursor.close();
         } else {
@@ -337,6 +347,18 @@ public class WorkingNote {
     }
 
     /**
+     * 【新增】设置置顶状态
+     * @param pinned true为置顶，false为取消置顶
+     */
+    public void setPinned(boolean pinned) {
+        if (mPinned != pinned) {
+            mPinned = pinned;
+            // 将状态存入数据模型，标记为需要同步
+            mNote.setNoteValue(NoteColumns.PINNED, mPinned ? "1" : "0");
+        }
+    }
+
+    /**
      * 设置桌面小部件类型
      */
     public void setWidgetType(int type) {
@@ -428,6 +450,11 @@ public class WorkingNote {
 
     public int getWidgetType() {
         return mWidgetType;
+    }
+
+    // 【新增】获取置顶状态
+    public boolean isPinned() {
+        return mPinned;
     }
 
     /**

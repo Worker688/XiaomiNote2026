@@ -83,7 +83,13 @@ dependencies {
 // Okio（OkHttp 依赖的 IO 库）
     implementation("com.squareup.okio:okio:3.6.0")
     implementation("com.squareup.okhttp3:okhttp-urlconnection:4.12.0")
+
+
 // 新增这行
+
+
+    implementation ("com.google.android.material:material:1.12.0")
+
 
 
     //新增为了转pdf - 核心库

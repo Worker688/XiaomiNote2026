@@ -75,4 +75,12 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|right"/>
+
+    <ImageView
+        android:id="@+id/iv_pin_icon"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginRight="4dip"
+        android:src="@drawable/ic_pin"
+        android:visibility="gone" />
 </FrameLayout>

@@ -35,7 +35,10 @@
     <string name="note_link_email">发送邮件</string>
     <string name="note_link_web">浏览网页</string>
     <string name="note_link_other">打开地图</string>
-    <!-- note list string -->
+    <string name="file_path">/MIUI/notes/</string>
+    <string name="file_name_txt_format">notes_%s.txt</string>
+    <!-- notes list string -->
+    <string name="format_folder_files_count">(%d)</string>
     <string name="menu_create_folder">新建文件夹</string>
     <string name="menu_export_text">导出文本</string>
     <string name="menu_sync">同步</string>
@@ -119,6 +122,10 @@
     <string name="search">便签</string>
     <string name="datetime_dialog_ok">设置</string>
     <string name="datetime_dialog_cancel">取消</string>
+
+    <string name="menu_pin">置顶</string>
+    <string name="menu_unpin">取消置顶</string>
+
     <plurals name="search_results_title">
         <item quantity="other"><xliff:g id="NUMBER">%1$s</xliff:g> 条符合“<xliff:g id="SEARCH">%2$s</xliff:g>”的搜索结果</item>
     </plurals>

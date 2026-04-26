@@ -509,6 +509,15 @@ public class NoteEditActivity extends Activity implements OnClickListener,
             menu.findItem(R.id.menu_alert).setVisible(true);
             menu.findItem(R.id.menu_delete_remind).setVisible(false);
         }
+
+        // 添加这一段：根据当前笔记是否置顶来更新菜单标题
+        MenuItem pinItem = menu.findItem(R.id.menu_pin);
+        if (mWorkingNote.isPinned()) {
+            pinItem.setTitle(R.string.menu_unpin);
+        } else {
+            pinItem.setTitle(R.string.menu_pin);
+        }
+
         return true;
     }
 
@@ -557,7 +566,24 @@ public class NoteEditActivity extends Activity implements OnClickListener,
             mWorkingNote.setAlertDate(0, false);
         } else if (itemId == R.id.menu_export_pdf) {
             exportCurrentNoteToPdf();
+        }else if (itemId == R.id.menu_pin){
+            mWorkingNote.setPinned(!mWorkingNote.isPinned());
+            // 更新菜单标题
+            if (mWorkingNote.isPinned()) {
+                item.setTitle(R.string.menu_unpin);
+                Toast.makeText(this, "已置顶", Toast.LENGTH_SHORT).show();
+            } else {
+                item.setTitle(R.string.menu_pin);
+                Toast.makeText(this, "已取消置顶", Toast.LENGTH_SHORT).show();
+            }
+            return true;
         }
+
+
+
+
+
+
 
         return true;
     }
