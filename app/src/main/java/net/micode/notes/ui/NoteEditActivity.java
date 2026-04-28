@@ -76,19 +76,25 @@ import com.itextpdf.text.Font;
 import com.itextpdf.text.Paragraph;
 import com.itextpdf.text.pdf.PdfWriter;
 
-
+/**
+ * 笔记编辑活动主类
+ * 负责笔记的查看、编辑、删除、分享、导出PDF、设置提醒、切换背景颜色/字体大小等功能
+ * 支持普通文本模式和待办清单模式
+ */
 public class NoteEditActivity extends Activity implements OnClickListener,
         NoteSettingChangedListener, OnTextViewChangeListener {
+
+    /**
+     * 头部视图的ViewHolder，缓存常用控件，提高性能
+     */
     private class HeadViewHolder {
-        public TextView tvModified;
-
-        public ImageView ivAlertIcon;
-
-        public TextView tvAlertDate;
-
-        public ImageView ibSetBgColor;
+        public TextView tvModified;      // 显示修改时间
+        public ImageView ivAlertIcon;    // 闹钟提醒图标
+        public TextView tvAlertDate;     // 提醒日期文本
+        public ImageView ibSetBgColor;   // 设置背景颜色按钮
     }
 
+    // 背景颜色选择按钮与颜色ID的映射表
     private static final Map<Integer, Integer> sBgSelectorBtnsMap = new HashMap<Integer, Integer>();
     static {
         sBgSelectorBtnsMap.put(R.id.iv_bg_yellow, ResourceParser.YELLOW);
@@ -98,6 +104,7 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         sBgSelectorBtnsMap.put(R.id.iv_bg_white, ResourceParser.WHITE);
     }
 
+    // 背景颜色ID与其对应的选中指示器视图ID的映射
     private static final Map<Integer, Integer> sBgSelectorSelectionMap = new HashMap<Integer, Integer>();
     static {
         sBgSelectorSelectionMap.put(ResourceParser.YELLOW, R.id.iv_bg_yellow_select);
@@ -107,6 +114,7 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         sBgSelectorSelectionMap.put(ResourceParser.WHITE, R.id.iv_bg_white_select);
     }
 
+    // 字体大小选择按钮与字体ID的映射
     private static final Map<Integer, Integer> sFontSizeBtnsMap = new HashMap<Integer, Integer>();
     static {
         sFontSizeBtnsMap.put(R.id.ll_font_large, ResourceParser.TEXT_LARGE);
@@ -115,6 +123,7 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         sFontSizeBtnsMap.put(R.id.ll_font_super, ResourceParser.TEXT_SUPER);
     }
 
+    // 字体ID与其对应的选中指示器视图ID的映射
     private static final Map<Integer, Integer> sFontSelectorSelectionMap = new HashMap<Integer, Integer>();
     static {
         sFontSelectorSelectionMap.put(ResourceParser.TEXT_LARGE, R.id.iv_large_select);
@@ -125,34 +134,27 @@ public class NoteEditActivity extends Activity implements OnClickListener,
 
     private static final String TAG = "NoteEditActivity";
 
-    private HeadViewHolder mNoteHeaderHolder;
-
-    private View mHeadViewPanel;
-
-    private View mNoteBgColorSelector;
-
-    private View mFontSizeSelector;
-
-    private EditText mNoteEditor;
-
-    private View mNoteEditorPanel;
-
-    private WorkingNote mWorkingNote;
-
-    private SharedPreferences mSharedPrefs;
-    private int mFontSizeId;
+    private HeadViewHolder mNoteHeaderHolder;          // 头部控件持有者
+    private View mHeadViewPanel;                       // 头部面板
+    private View mNoteBgColorSelector;                 // 背景颜色选择器面板
+    private View mFontSizeSelector;                    // 字体大小选择器面板
+    private EditText mNoteEditor;                      // 普通模式下的文本编辑器
+    private View mNoteEditorPanel;                     // 编辑器所在面板
+    private WorkingNote mWorkingNote;                  // 当前正在编辑的笔记模型
+    private SharedPreferences mSharedPrefs;            // 偏好设置
+    private int mFontSizeId;                           // 当前字体大小ID
 
     private static final String PREFERENCE_FONT_SIZE = "pref_font_size";
-
     private static final int SHORTCUT_ICON_TITLE_MAX_LEN = 10;
 
-    public static final String TAG_CHECKED = String.valueOf('\u221A');
-    public static final String TAG_UNCHECKED = String.valueOf('\u25A1');
+    public static final String TAG_CHECKED = String.valueOf('\u221A');   // 待办清单中已完成的标记（√）
+    public static final String TAG_UNCHECKED = String.valueOf('\u25A1'); // 待办清单中未完成的标记（□）
 
-    private LinearLayout mEditTextList;
+    private LinearLayout mEditTextList;                 // 待办清单模式下的列表容器
+    private String mUserQuery;                          // 搜索时的用户查询词
+    private Pattern mPattern;                           // 用于高亮搜索词的正则模式
 
-    private String mUserQuery;
-    private Pattern mPattern;
+    // ===================== 生命周期方法 =====================
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -167,8 +169,7 @@ public class NoteEditActivity extends Activity implements OnClickListener,
     }
 
     /**
-     * Current activity may be killed when the memory is low. Once it is killed, for another time
-     * user load this activity, we should restore the former state
+     * 当内存不足导致Activity被杀死后，恢复之前的编辑状态
      */
     @Override
     protected void onRestoreInstanceState(Bundle savedInstanceState) {
@@ -184,19 +185,61 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         }
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        initNoteScreen();  // 刷新界面（背景、字体、内容等）
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (saveNote()) {
+            Log.d(TAG, "Note data was saved with length:" + mWorkingNote.getContent().length());
+        }
+        clearSettingState();
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        // 如果笔记还未保存到数据库，先保存以生成id
+        if (!mWorkingNote.existInDatabase()) {
+            saveNote();
+        }
+        outState.putLong(Intent.EXTRA_UID, mWorkingNote.getNoteId());
+        Log.d(TAG, "Save working note id: " + mWorkingNote.getNoteId() + " onSaveInstanceState");
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        initActivityState(intent);  // 处理新的Intent（例如从搜索进入）
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (clearSettingState()) {
+            return;
+        }
+        saveNote();
+        super.onBackPressed();
+    }
+
+    // ===================== 初始化相关方法 =====================
+
+    /**
+     * 根据Intent初始化Activity状态，加载或创建笔记
+     * @param intent 启动Activity的Intent
+     * @return 是否初始化成功
+     */
     private boolean initActivityState(Intent intent) {
-        /**
-         * If the user specified the {@link Intent#ACTION_VIEW} but not provided with id,
-         * then jump to the NotesListActivity
-         */
         mWorkingNote = null;
         if (TextUtils.equals(Intent.ACTION_VIEW, intent.getAction())) {
             long noteId = intent.getLongExtra(Intent.EXTRA_UID, 0);
             mUserQuery = "";
 
-            /**
-             * Starting from the searched result
-             */
+            // 从搜索结果中获取笔记id
             if (intent.hasExtra(SearchManager.EXTRA_DATA_KEY)) {
                 noteId = Long.parseLong(intent.getStringExtra(SearchManager.EXTRA_DATA_KEY));
                 mUserQuery = intent.getStringExtra(SearchManager.USER_QUERY);
@@ -219,8 +262,8 @@ public class NoteEditActivity extends Activity implements OnClickListener,
             getWindow().setSoftInputMode(
                     WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
                             | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-        } else if(TextUtils.equals(Intent.ACTION_INSERT_OR_EDIT, intent.getAction())) {
-            // New note
+        } else if (TextUtils.equals(Intent.ACTION_INSERT_OR_EDIT, intent.getAction())) {
+            // 新建笔记
             long folderId = intent.getLongExtra(Notes.INTENT_EXTRA_FOLDER_ID, 0);
             int widgetId = intent.getIntExtra(Notes.INTENT_EXTRA_WIDGET_ID,
                     AppWidgetManager.INVALID_APPWIDGET_ID);
@@ -229,7 +272,7 @@ public class NoteEditActivity extends Activity implements OnClickListener,
             int bgResId = intent.getIntExtra(Notes.INTENT_EXTRA_BACKGROUND_ID,
                     ResourceParser.getDefaultBgId(this));
 
-            // Parse call-record note
+            // 处理通话记录笔记
             String phoneNumber = intent.getStringExtra(Intent.EXTRA_PHONE_NUMBER);
             long callDate = intent.getLongExtra(Notes.INTENT_EXTRA_CALL_DATE, 0);
             if (callDate != 0 && phoneNumber != null) {
@@ -267,12 +310,9 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         return true;
     }
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-        initNoteScreen();
-    }
-
+    /**
+     * 刷新笔记界面：设置字体、背景色、内容（支持搜索高亮）、修改时间、提醒头部等
+     */
     private void initNoteScreen() {
         mNoteEditor.setTextAppearance(this, TextAppearanceResources
                 .getTexAppearanceResource(mFontSizeId));
@@ -293,13 +333,12 @@ public class NoteEditActivity extends Activity implements OnClickListener,
                         | DateUtils.FORMAT_NUMERIC_DATE | DateUtils.FORMAT_SHOW_TIME
                         | DateUtils.FORMAT_SHOW_YEAR));
 
-        /**
-         * TODO: Add the menu for setting alert. Currently disable it because the DateTimePicker
-         * is not ready
-         */
         showAlertHeader();
     }
 
+    /**
+     * 显示提醒头部（如果设置了闹钟提醒，则显示提醒时间；若已过期显示“已过期”）
+     */
     private void showAlertHeader() {
         if (mWorkingNote.hasClockAlert()) {
             long time = System.currentTimeMillis();
@@ -314,60 +353,12 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         } else {
             mNoteHeaderHolder.tvAlertDate.setVisibility(View.GONE);
             mNoteHeaderHolder.ivAlertIcon.setVisibility(View.GONE);
-        };
-    }
-
-    @Override
-    protected void onNewIntent(Intent intent) {
-        super.onNewIntent(intent);
-        initActivityState(intent);
-    }
-
-    @Override
-    protected void onSaveInstanceState(Bundle outState) {
-        super.onSaveInstanceState(outState);
-        /**
-         * For new note without note id, we should firstly save it to
-         * generate a id. If the editing note is not worth saving, there
-         * is no id which is equivalent to create new note
-         */
-        if (!mWorkingNote.existInDatabase()) {
-            saveNote();
         }
-        outState.putLong(Intent.EXTRA_UID, mWorkingNote.getNoteId());
-        Log.d(TAG, "Save working note id: " + mWorkingNote.getNoteId() + " onSaveInstanceState");
     }
 
-    @Override
-    public boolean dispatchTouchEvent(MotionEvent ev) {
-        if (mNoteBgColorSelector.getVisibility() == View.VISIBLE
-                && !inRangeOfView(mNoteBgColorSelector, ev)) {
-            mNoteBgColorSelector.setVisibility(View.GONE);
-            return true;
-        }
-
-        if (mFontSizeSelector.getVisibility() == View.VISIBLE
-                && !inRangeOfView(mFontSizeSelector, ev)) {
-            mFontSizeSelector.setVisibility(View.GONE);
-            return true;
-        }
-        return super.dispatchTouchEvent(ev);
-    }
-
-    private boolean inRangeOfView(View view, MotionEvent ev) {
-        int []location = new int[2];
-        view.getLocationOnScreen(location);
-        int x = location[0];
-        int y = location[1];
-        if (ev.getX() < x
-                || ev.getX() > (x + view.getWidth())
-                || ev.getY() < y
-                || ev.getY() > (y + view.getHeight())) {
-            return false;
-        }
-        return true;
-    }
-
+    /**
+     * 初始化界面控件资源，绑定点击事件，加载字体大小偏好
+     */
     private void initResources() {
         mHeadViewPanel = findViewById(R.id.note_title);
         mNoteHeaderHolder = new HeadViewHolder();
@@ -388,60 +379,63 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         for (int id : sFontSizeBtnsMap.keySet()) {
             View view = findViewById(id);
             view.setOnClickListener(this);
-        };
+        }
         mSharedPrefs = PreferenceManager.getDefaultSharedPreferences(this);
         mFontSizeId = mSharedPrefs.getInt(PREFERENCE_FONT_SIZE, ResourceParser.BG_DEFAULT_FONT_SIZE);
-        /**
-         * HACKME: Fix bug of store the resource id in shared preference.
-         * The id may larger than the length of resources, in this case,
-         * return the {@link ResourceParser#BG_DEFAULT_FONT_SIZE}
-         */
-        if(mFontSizeId >= TextAppearanceResources.getResourcesSize()) {
+        if (mFontSizeId >= TextAppearanceResources.getResourcesSize()) {
             mFontSizeId = ResourceParser.BG_DEFAULT_FONT_SIZE;
         }
         mEditTextList = (LinearLayout) findViewById(R.id.note_edit_list);
     }
 
+    // ===================== 触摸事件处理（用于关闭选择器面板） =====================
+
     @Override
-    protected void onPause() {
-        super.onPause();
-        if(saveNote()) {
-            Log.d(TAG, "Note data was saved with length:" + mWorkingNote.getContent().length());
-        }
-        clearSettingState();
-    }
-
-    private void updateWidget() {
-        Intent intent = new Intent(AppWidgetManager.ACTION_APPWIDGET_UPDATE);
-        if (mWorkingNote.getWidgetType() == Notes.TYPE_WIDGET_2X) {
-            intent.setClass(this, NoteWidgetProvider_2x.class);
-        } else if (mWorkingNote.getWidgetType() == Notes.TYPE_WIDGET_4X) {
-            intent.setClass(this, NoteWidgetProvider_4x.class);
-        } else {
-            Log.e(TAG, "Unspported widget type");
-            return;
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (mNoteBgColorSelector.getVisibility() == View.VISIBLE
+                && !inRangeOfView(mNoteBgColorSelector, ev)) {
+            mNoteBgColorSelector.setVisibility(View.GONE);
+            return true;
         }
 
-        intent.putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, new int[] {
-                mWorkingNote.getWidgetId()
-        });
-
-        sendBroadcast(intent);
-        setResult(RESULT_OK, intent);
+        if (mFontSizeSelector.getVisibility() == View.VISIBLE
+                && !inRangeOfView(mFontSizeSelector, ev)) {
+            mFontSizeSelector.setVisibility(View.GONE);
+            return true;
+        }
+        return super.dispatchTouchEvent(ev);
     }
 
+    /**
+     * 判断触摸点是否在指定视图范围内
+     */
+    private boolean inRangeOfView(View view, MotionEvent ev) {
+        int[] location = new int[2];
+        view.getLocationOnScreen(location);
+        int x = location[0];
+        int y = location[1];
+        return !(ev.getX() < x || ev.getX() > (x + view.getWidth())
+                || ev.getY() < y || ev.getY() > (y + view.getHeight()));
+    }
+
+    // ===================== 点击事件处理 =====================
+
+    @Override
     public void onClick(View v) {
         int id = v.getId();
         if (id == R.id.btn_set_bg_color) {
+            // 显示背景颜色选择器，并高亮当前选中的颜色
             mNoteBgColorSelector.setVisibility(View.VISIBLE);
             findViewById(sBgSelectorSelectionMap.get(mWorkingNote.getBgColorId())).setVisibility(
                     View.VISIBLE);
         } else if (sBgSelectorBtnsMap.containsKey(id)) {
+            // 切换背景颜色
             findViewById(sBgSelectorSelectionMap.get(mWorkingNote.getBgColorId())).setVisibility(
                     View.GONE);
             mWorkingNote.setBgColorId(sBgSelectorBtnsMap.get(id));
             mNoteBgColorSelector.setVisibility(View.GONE);
         } else if (sFontSizeBtnsMap.containsKey(id)) {
+            // 切换字体大小
             findViewById(sFontSelectorSelectionMap.get(mFontSizeId)).setVisibility(View.GONE);
             mFontSizeId = sFontSizeBtnsMap.get(id);
             mSharedPrefs.edit().putInt(PREFERENCE_FONT_SIZE, mFontSizeId).commit();
@@ -457,16 +451,10 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         }
     }
 
-    @Override
-    public void onBackPressed() {
-        if(clearSettingState()) {
-            return;
-        }
-
-        saveNote();
-        super.onBackPressed();
-    }
-
+    /**
+     * 关闭背景颜色或字体大小的选择器面板
+     * @return 是否关闭了某个面板
+     */
     private boolean clearSettingState() {
         if (mNoteBgColorSelector.getVisibility() == View.VISIBLE) {
             mNoteBgColorSelector.setVisibility(View.GONE);
@@ -478,12 +466,7 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         return false;
     }
 
-    public void onBackgroundColorChanged() {
-        findViewById(sBgSelectorSelectionMap.get(mWorkingNote.getBgColorId())).setVisibility(
-                View.VISIBLE);
-        mNoteEditorPanel.setBackgroundResource(mWorkingNote.getBgColorResId());
-        mHeadViewPanel.setBackgroundResource(mWorkingNote.getTitleBgResId());
-    }
+    // ===================== 菜单相关 =====================
 
     @Override
     public boolean onPrepareOptionsMenu(Menu menu) {
@@ -512,14 +495,12 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         return true;
     }
 
-    // ========== 这里已经全部改成 if-else，修复了常量表达式错误 ==========
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         int itemId = item.getItemId();
 
         if (itemId == R.id.menu_new_note) {
             createNewNote();
-
         } else if (itemId == R.id.menu_delete) {
             AlertDialog.Builder builder = new AlertDialog.Builder(this);
             builder.setTitle(getString(R.string.alert_title_delete));
@@ -534,25 +515,19 @@ public class NoteEditActivity extends Activity implements OnClickListener,
                     });
             builder.setNegativeButton(android.R.string.cancel, null);
             builder.show();
-
         } else if (itemId == R.id.menu_font_size) {
             mFontSizeSelector.setVisibility(View.VISIBLE);
             findViewById(sFontSelectorSelectionMap.get(mFontSizeId)).setVisibility(View.VISIBLE);
-
         } else if (itemId == R.id.menu_list_mode) {
             mWorkingNote.setCheckListMode(mWorkingNote.getCheckListMode() == 0 ?
                     TextNote.MODE_CHECK_LIST : 0);
-
         } else if (itemId == R.id.menu_share) {
             getWorkingText();
             sendTo(this, mWorkingNote.getContent());
-
         } else if (itemId == R.id.menu_send_to_desktop) {
             sendToDesktop();
-
         } else if (itemId == R.id.menu_alert) {
             setReminder();
-
         } else if (itemId == R.id.menu_delete_remind) {
             mWorkingNote.setAlertDate(0, false);
         } else if (itemId == R.id.menu_export_pdf) {
@@ -562,19 +537,21 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         return true;
     }
 
+    /**
+     * 弹出日期时间选择对话框，设置提醒时间
+     */
     private void setReminder() {
         DateTimePickerDialog d = new DateTimePickerDialog(this, System.currentTimeMillis());
         d.setOnDateTimeSetListener(new OnDateTimeSetListener() {
             public void OnDateTimeSet(AlertDialog dialog, long date) {
-                mWorkingNote.setAlertDate(date	, true);
+                mWorkingNote.setAlertDate(date, true);
             }
         });
         d.show();
     }
 
     /**
-     * Share note to apps that support {@link Intent#ACTION_SEND} action
-     * and {@text/plain} type
+     * 通过系统分享功能发送文本内容
      */
     private void sendTo(Context context, String info) {
         Intent intent = new Intent(Intent.ACTION_SEND);
@@ -583,11 +560,11 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         context.startActivity(intent);
     }
 
+    /**
+     * 新建笔记：先保存当前笔记，然后启动新的NoteEditActivity
+     */
     private void createNewNote() {
-        // Firstly, save current editing notes
         saveNote();
-
-        // For safety, start a new NoteEditActivity
         finish();
         Intent intent = new Intent(this, NoteEditActivity.class);
         intent.setAction(Intent.ACTION_INSERT_OR_EDIT);
@@ -595,6 +572,9 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         startActivity(intent);
     }
 
+    /**
+     * 删除当前笔记（如果处于同步模式则移动到回收站，否则直接删除）
+     */
     private void deleteCurrentNote() {
         if (mWorkingNote.existInDatabase()) {
             HashSet<Long> ids = new HashSet<Long>();
@@ -617,45 +597,75 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         mWorkingNote.markDeleted(true);
     }
 
+    /**
+     * 判断当前是否为同步模式（已设置同步账号）
+     */
     private boolean isSyncMode() {
         return NotesPreferenceActivity.getSyncAccountName(this).trim().length() > 0;
     }
 
+    // ===================== WorkingNote回调接口实现 =====================
+
+    @Override
+    public void onBackgroundColorChanged() {
+        findViewById(sBgSelectorSelectionMap.get(mWorkingNote.getBgColorId())).setVisibility(
+                View.VISIBLE);
+        mNoteEditorPanel.setBackgroundResource(mWorkingNote.getBgColorResId());
+        mHeadViewPanel.setBackgroundResource(mWorkingNote.getTitleBgResId());
+    }
+
+    @Override
     public void onClockAlertChanged(long date, boolean set) {
-        /**
-         * User could set clock to an unsaved note, so before setting the
-         * alert clock, we should save the note first
-         */
         if (!mWorkingNote.existInDatabase()) {
             saveNote();
         }
         if (mWorkingNote.getNoteId() > 0) {
             Intent intent = new Intent(this, AlarmReceiver.class);
             intent.setData(ContentUris.withAppendedId(Notes.CONTENT_NOTE_URI, mWorkingNote.getNoteId()));
-            // 适配Android 12+，添加FLAG_IMMUTABLE（闹钟类PendingIntent用不可变更安全）
             PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_IMMUTABLE);
             AlarmManager alarmManager = ((AlarmManager) getSystemService(ALARM_SERVICE));
             showAlertHeader();
-            if(!set) {
+            if (!set) {
                 alarmManager.cancel(pendingIntent);
             } else {
                 alarmManager.set(AlarmManager.RTC_WAKEUP, date, pendingIntent);
             }
         } else {
-            /**
-             * There is the condition that user has input nothing (the note is
-             * not worthy saving), we have no note id, remind the user that he
-             * should input something
-             */
             Log.e(TAG, "Clock alert setting error");
             showToast(R.string.error_note_empty_for_clock);
         }
     }
 
+    @Override
     public void onWidgetChanged() {
-        updateWidget();
+        updateWidget();  // 通知桌面小部件更新
     }
 
+    /**
+     * 更新关联的小部件（2x或4x）
+     */
+    private void updateWidget() {
+        Intent intent = new Intent(AppWidgetManager.ACTION_APPWIDGET_UPDATE);
+        if (mWorkingNote.getWidgetType() == Notes.TYPE_WIDGET_2X) {
+            intent.setClass(this, NoteWidgetProvider_2x.class);
+        } else if (mWorkingNote.getWidgetType() == Notes.TYPE_WIDGET_4X) {
+            intent.setClass(this, NoteWidgetProvider_4x.class);
+        } else {
+            Log.e(TAG, "Unspported widget type");
+            return;
+        }
+
+        intent.putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, new int[]{
+                mWorkingNote.getWidgetId()
+        });
+
+        sendBroadcast(intent);
+        setResult(RESULT_OK, intent);
+    }
+
+    // ===================== 待办清单模式相关方法（OnTextViewChangeListener实现） =====================
+
+    @Override
     public void onEditTextDelete(int index, String text) {
         int childCount = mEditTextList.getChildCount();
         if (childCount == 1) {
@@ -669,7 +679,7 @@ public class NoteEditActivity extends Activity implements OnClickListener,
 
         mEditTextList.removeViewAt(index);
         NoteEditText edit = null;
-        if(index == 0) {
+        if (index == 0) {
             edit = (NoteEditText) mEditTextList.getChildAt(0).findViewById(
                     R.id.et_edit_text);
         } else {
@@ -682,11 +692,9 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         edit.setSelection(length);
     }
 
+    @Override
     public void onEditTextEnter(int index, String text) {
-        /**
-         * Should not happen, check for debug
-         */
-        if(index > mEditTextList.getChildCount()) {
+        if (index > mEditTextList.getChildCount()) {
             Log.e(TAG, "Index out of mEditTextList boundrary, should not happen");
         }
 
@@ -701,12 +709,43 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         }
     }
 
+    @Override
+    public void onTextChange(int index, boolean hasText) {
+        if (index >= mEditTextList.getChildCount()) {
+            Log.e(TAG, "Wrong index, should not happen");
+            return;
+        }
+        if (hasText) {
+            mEditTextList.getChildAt(index).findViewById(R.id.cb_edit_item).setVisibility(View.VISIBLE);
+        } else {
+            mEditTextList.getChildAt(index).findViewById(R.id.cb_edit_item).setVisibility(View.GONE);
+        }
+    }
+
+    @Override
+    public void onCheckListModeChanged(int oldMode, int newMode) {
+        if (newMode == TextNote.MODE_CHECK_LIST) {
+            switchToListMode(mNoteEditor.getText().toString());
+        } else {
+            if (!getWorkingText()) {
+                mWorkingNote.setWorkingText(mWorkingNote.getContent().replace(TAG_UNCHECKED + " ",
+                        ""));
+            }
+            mNoteEditor.setText(getHighlightQueryResult(mWorkingNote.getContent(), mUserQuery));
+            mEditTextList.setVisibility(View.GONE);
+            mNoteEditor.setVisibility(View.VISIBLE);
+        }
+    }
+
+    /**
+     * 切换到待办清单模式，将文本按换行分割为多个带复选框的列表项
+     */
     private void switchToListMode(String text) {
         mEditTextList.removeAllViews();
         String[] items = text.split("\n");
         int index = 0;
         for (String item : items) {
-            if(!TextUtils.isEmpty(item)) {
+            if (!TextUtils.isEmpty(item)) {
                 mEditTextList.addView(getListItem(item, index));
                 index++;
             }
@@ -718,6 +757,9 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         mEditTextList.setVisibility(View.VISIBLE);
     }
 
+    /**
+     * 为搜索结果中的关键词添加高亮背景
+     */
     private Spannable getHighlightQueryResult(String fullText, String userQuery) {
         SpannableString spannable = new SpannableString(fullText == null ? "" : fullText);
         if (!TextUtils.isEmpty(userQuery)) {
@@ -735,6 +777,11 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         return spannable;
     }
 
+    /**
+     * 创建待办清单中的单个列表项视图
+     * @param item 文本内容，可能以 √ 或 □ 开头
+     * @param index 列表项索引
+     */
     private View getListItem(String item, int index) {
         View view = LayoutInflater.from(this).inflate(R.layout.note_edit_list_item, null);
         final NoteEditText edit = (NoteEditText) view.findViewById(R.id.et_edit_text);
@@ -766,32 +813,10 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         return view;
     }
 
-    public void onTextChange(int index, boolean hasText) {
-        if (index >= mEditTextList.getChildCount()) {
-            Log.e(TAG, "Wrong index, should not happen");
-            return;
-        }
-        if(hasText) {
-            mEditTextList.getChildAt(index).findViewById(R.id.cb_edit_item).setVisibility(View.VISIBLE);
-        } else {
-            mEditTextList.getChildAt(index).findViewById(R.id.cb_edit_item).setVisibility(View.GONE);
-        }
-    }
-
-    public void onCheckListModeChanged(int oldMode, int newMode) {
-        if (newMode == TextNote.MODE_CHECK_LIST) {
-            switchToListMode(mNoteEditor.getText().toString());
-        } else {
-            if (!getWorkingText()) {
-                mWorkingNote.setWorkingText(mWorkingNote.getContent().replace(TAG_UNCHECKED + " ",
-                        ""));
-            }
-            mNoteEditor.setText(getHighlightQueryResult(mWorkingNote.getContent(), mUserQuery));
-            mEditTextList.setVisibility(View.GONE);
-            mNoteEditor.setVisibility(View.VISIBLE);
-        }
-    }
-
+    /**
+     * 从编辑界面（普通或清单模式）获取最终文本内容，存入WorkingNote
+     * @return 是否存在已勾选的待办项
+     */
     private boolean getWorkingText() {
         boolean hasChecked = false;
         if (mWorkingNote.getCheckListMode() == TextNote.MODE_CHECK_LIST) {
@@ -815,28 +840,23 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         return hasChecked;
     }
 
+    /**
+     * 保存当前笔记到数据库
+     * @return 是否保存成功
+     */
     private boolean saveNote() {
         getWorkingText();
         boolean saved = mWorkingNote.saveNote();
         if (saved) {
-            /**
-             * There are two modes from List view to edit view, open one note,
-             * create/edit a node. Opening node requires to the original
-             * position in the list when back from edit view, while creating a
-             * new node requires to the top of the list. This code
-             * {@link #RESULT_OK} is used to identify the create/edit state
-             */
             setResult(RESULT_OK);
         }
         return saved;
     }
 
+    /**
+     * 将当前笔记创建为桌面快捷方式
+     */
     private void sendToDesktop() {
-        /**
-         * Before send message to home, we should make sure that current
-         * editing note is exists in databases. So, for new note, firstly
-         * save it
-         */
         if (!mWorkingNote.existInDatabase()) {
             saveNote();
         }
@@ -856,16 +876,14 @@ public class NoteEditActivity extends Activity implements OnClickListener,
             showToast(R.string.info_note_enter_desktop);
             sendBroadcast(sender);
         } else {
-            /**
-             * There is the condition that user has input nothing (the note is
-             * not worthy saving), we have no note id, remind the user that he
-             * should input something
-             */
             Log.e(TAG, "Send to desktop error");
             showToast(R.string.error_note_empty_for_send_to_desktop);
         }
     }
 
+    /**
+     * 生成快捷方式的标题（截取前N个字符，并移除勾选标记）
+     */
     private String makeShortcutIconTitle(String content) {
         content = content.replace(TAG_CHECKED, "");
         content = content.replace(TAG_UNCHECKED, "");
@@ -881,37 +899,35 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         Toast.makeText(this, resId, duration).show();
     }
 
+    // ===================== 导出PDF功能 =====================
 
-    // ===================== 导出当前笔记为PDF =====================
+    /**
+     * 导出当前笔记为PDF文件（使用Android原生PdfDocument，避免第三方库冲突）
+     * 步骤：检查权限 -> 创建目录 -> 写入PDF -> 提示成功/失败
+     */
     private void exportCurrentNoteToPdf() {
-        // 1. 先检查权限，没有就直接退出（会自动弹窗申请）
         if (!checkStoragePermission()) {
             return;
         }
 
         try {
-            // 先确保内容已保存
             getWorkingText();
             String content = mWorkingNote.getContent();
 
-            // 2. 【修复路径创建失败】最稳路径 + 强制创建
-            java.io.File dir = getExternalFilesDir("Notes"); // 系统给的目录
+            java.io.File dir = getExternalFilesDir("Notes");
             if (!dir.exists()) {
-                boolean created = dir.mkdirs(); // 这里加了返回值，确保一定创建成功
+                boolean created = dir.mkdirs();
                 if (!created) {
                     runOnUiThread(() -> Toast.makeText(this, "文件夹创建失败", Toast.LENGTH_SHORT).show());
                     return;
                 }
             }
 
-            // 3. 文件名
             String fileName = "note_" + mWorkingNote.getNoteId() + ".pdf";
             java.io.File pdfFile = new java.io.File(dir, fileName);
 
-            // 4. 【修复 iText 崩溃】使用 Android 自带 PdfDocument，零依赖、零报错、零冲突
+            // 使用 Android 自带的 PdfDocument 生成 PDF
             android.graphics.pdf.PdfDocument document = new android.graphics.pdf.PdfDocument();
-
-            // 定义A4页面大小
             android.graphics.pdf.PdfDocument.PageInfo pageInfo = new android.graphics.pdf.PdfDocument.PageInfo.Builder(595, 842, 1).create();
             android.graphics.pdf.PdfDocument.Page page = document.startPage(pageInfo);
             android.graphics.Canvas canvas = page.getCanvas();
@@ -919,16 +935,13 @@ public class NoteEditActivity extends Activity implements OnClickListener,
             paint.setTextSize(14);
             paint.setAntiAlias(true);
 
-            // 标题
             canvas.drawText("小米笔记", 40, 50, paint);
             canvas.drawText("------------------------", 40, 70, paint);
 
-            // 内容分行绘制（解决长文本崩溃）
             int yPos = 100;
             String[] lines = content.split("\n");
             for (String line : lines) {
                 if (yPos > 800) {
-                    // 换一页
                     document.finishPage(page);
                     pageInfo = new android.graphics.pdf.PdfDocument.PageInfo.Builder(595, 842, document.getPages().size() + 1).create();
                     page = document.startPage(pageInfo);
@@ -943,7 +956,6 @@ public class NoteEditActivity extends Activity implements OnClickListener,
             document.writeTo(new java.io.FileOutputStream(pdfFile));
             document.close();
 
-            // 成功提示
             runOnUiThread(() -> {
                 Toast.makeText(NoteEditActivity.this,
                         "导出成功！\n路径：内部存储/Notes/" + fileName,
@@ -958,10 +970,11 @@ public class NoteEditActivity extends Activity implements OnClickListener,
         }
     }
 
-
-    // 权限申请代码
     private static final int REQUEST_CODE_STORAGE = 100;
 
+    /**
+     * 检查并申请存储权限（Android 6.0+）
+     */
     private boolean checkStoragePermission() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
             if (checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
