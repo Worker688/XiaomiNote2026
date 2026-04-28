@@ -85,7 +85,8 @@
 
                 <LinearLayout
                     android:layout_width="fill_parent"
-                    android:layout_height="fill_parent">
+                    android:layout_height="fill_parent"
+                    android:orientation="horizontal">
 
                     <net.micode.notes.ui.NoteEditText
                         android:id="@+id/note_edit_view"
@@ -98,6 +99,7 @@
                         android:minLines="12"
                         android:textAppearance="@style/TextAppearancePrimaryItem"
                         android:lineSpacingMultiplier="1.2" />
+
 
                     <LinearLayout
                         android:id="@+id/note_edit_list"
@@ -113,6 +115,16 @@
                 android:layout_width="fill_parent"
                 android:layout_height="7dip"
                 android:background="@drawable/bg_color_btn_mask" />
+
+            <!-- 字数统计显示 -->
+            <TextView
+                android:id="@+id/tv_word_count"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_margin="8dp"
+                android:textSize="12sp"
+                android:textColor="@android:color/darker_gray"
+                android:text="@string/word_count" />
         </LinearLayout>
     </LinearLayout>
 

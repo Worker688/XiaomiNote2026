@@ -16,19 +16,20 @@
 -->
 
 <menu
-    xmlns:android="http://schemas.android.com/apk/res/android">
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <item
         android:id="@+id/menu_new_note"
-        android:title="@string/notelist_menu_new"/>
+        android:title="@string/notelist_menu_new" />
 
     <item
         android:id="@+id/menu_delete"
-        android:title="@string/menu_delete"/>
+        android:title="@string/menu_delete" />
 
     <item
         android:id="@+id/menu_font_size"
-        android:title="@string/menu_font_size"/>
+        android:title="@string/menu_font_size" />
 
     <item
         android:id="@+id/menu_list_mode"
@@ -36,11 +37,11 @@
 
     <item
         android:id="@+id/menu_share"
-        android:title="@string/menu_share"/>
+        android:title="@string/menu_share" />
 
     <item
         android:id="@+id/menu_send_to_desktop"
-        android:title="@string/menu_send_to_desktop"/>
+        android:title="@string/menu_send_to_desktop" />
 
     <item
         android:id="@+id/menu_alert"
@@ -51,16 +52,15 @@
         android:title="@string/menu_remove_remind" />
 
 
-
     <item
         android:id="@+id/menu_export_pdf"
         android:title="Export as PDF"
-        android:showAsAction="never"/>
+        android:showAsAction="never" />
 
     <!-- 在 note_edit.xml 菜单中 -->
     <item
         android:id="@+id/menu_pin"
         android:title="@string/menu_pin"
         android:icon="@drawable/ic_pin"
-        android:showAsAction="never" />
+        app:showAsAction="never" />
 </menu>
